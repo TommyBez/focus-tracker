@@ -1,0 +1,17 @@
+{
+  "name": "focus-tracker",
+  "private": true,
+  "description": "Pinned authoring toolchain for the Native SDK TypeScript core.",
+  "scripts": {
+    "check": "native validate app.zon && native test && native check --strict",
+    "package:app": "./scripts/package-app.sh",
+    "package:dmg": "./scripts/build-dmg.sh",
+    "verify:dmg": "./scripts/verify-dmg.sh --expect-background --expect-volume-icon"
+  },
+  "dependencies": {
+    "@native-sdk/core": "0.6.2"
+  },
+  "devDependencies": {
+    "@typescript/old": "npm:typescript@6.0.3"
+  }
+}

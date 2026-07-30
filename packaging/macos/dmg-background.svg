@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="660" height="430" viewBox="0 0 660 430">
+  <title>Focus Tracker disk image background</title>
+  <desc>Dark Cobalt Ledger installation surface with a directional focus gate from Focus Tracker to Applications.</desc>
+
+  <defs>
+    <linearGradient id="canvas" x1="28" y1="8" x2="632" y2="422" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1b1d22"/>
+      <stop offset="0.46" stop-color="#14161b"/>
+      <stop offset="1" stop-color="#0d0f13"/>
+    </linearGradient>
+    <radialGradient id="leftHalo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#6683ff" stop-opacity="0.24"/>
+      <stop offset="0.56" stop-color="#3156d9" stop-opacity="0.085"/>
+      <stop offset="1" stop-color="#3156d9" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="rightHalo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#f3efe5" stop-opacity="0.028"/>
+      <stop offset="0.65" stop-color="#f3efe5" stop-opacity="0.006"/>
+      <stop offset="1" stop-color="#f3efe5" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gate" x1="243" y1="0" x2="419" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3156d9" stop-opacity="0.34"/>
+      <stop offset="0.2" stop-color="#496cff"/>
+      <stop offset="0.78" stop-color="#6f8aff"/>
+      <stop offset="1" stop-color="#9aabff" stop-opacity="0.4"/>
+    </linearGradient>
+    <linearGradient id="labelPlate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f1efe9"/>
+      <stop offset="1" stop-color="#d7d6d2"/>
+    </linearGradient>
+    <pattern id="ledger" width="22" height="22" patternUnits="userSpaceOnUse">
+      <path d="M22 0H0V22" fill="none" stroke="#ffffff" stroke-opacity="0.018" stroke-width="1"/>
+    </pattern>
+    <filter id="grain" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.72" numOctaves="4" seed="37" result="noise"/>
+      <feColorMatrix in="noise" type="saturate" values="0" result="mono"/>
+      <feComponentTransfer in="mono">
+        <feFuncA type="table" tableValues="0 0.045"/>
+      </feComponentTransfer>
+    </filter>
+    <filter id="gateGlow" x="-30%" y="-1000%" width="160%" height="2100%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="4.5"/>
+    </filter>
+    <filter id="plateShadow" x="-20%" y="-70%" width="140%" height="240%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="blur"/>
+      <feOffset in="blur" dy="2" result="offsetBlur"/>
+      <feFlood flood-color="#000000" flood-opacity="0.42" result="shadowColor"/>
+      <feComposite in="shadowColor" in2="offsetBlur" operator="in" result="shadow"/>
+      <feMerge>
+        <feMergeNode in="shadow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Cobalt Ledger canvas: quiet enough to keep Finder labels legible. -->
+  <rect width="660" height="430" fill="url(#canvas)"/>
+  <rect x="1" y="1" width="658" height="428" rx="1" fill="none" stroke="#ffffff" stroke-opacity="0.045"/>
+  <rect width="660" height="430" fill="url(#ledger)" opacity="0.42"/>
+  <rect width="660" height="430" fill="#ffffff" filter="url(#grain)" opacity="0.52"/>
+
+  <!-- Editorial masthead. -->
+  <g transform="translate(330 35)">
+    <rect x="-69" y="-9" width="18" height="18" rx="5" fill="#202329" stroke="#ffffff" stroke-opacity="0.12"/>
+    <path d="M-66 -1H-54" stroke="#4f70f5" stroke-width="1.6" stroke-linecap="round"/>
+    <rect x="-57.5" y="-4" width="3.5" height="6" rx="1" fill="#f2eee4"/>
+    <text x="-42" y="4" fill="#d7d8dd" font-family="Avenir Next, sans-serif" font-size="12" font-weight="600" letter-spacing="2.2">FOCUS TRACKER</text>
+  </g>
+
+  <line x1="60" y1="61.5" x2="600" y2="61.5" stroke="#ffffff" stroke-opacity="0.08"/>
+  <circle cx="60" cy="61.5" r="1.5" fill="#5f7eff"/>
+  <circle cx="600" cy="61.5" r="1.5" fill="#ffffff" fill-opacity="0.26"/>
+
+  <text x="330" y="99" fill="#f3f1eb" text-anchor="middle"
+        font-family="'.New York', 'New York', Georgia, serif" font-size="26" font-weight="600" letter-spacing="-0.35">
+    Drag Focus Tracker to Applications
+  </text>
+  <text x="330" y="124" fill="#969aa5" text-anchor="middle"
+        font-family="Avenir Next, sans-serif" font-size="11.5" font-weight="500" letter-spacing="0.25">
+    Your task ledger and focus history stay private on this Mac.
+  </text>
+
+  <!-- Clear, low-contrast landing fields behind the two Finder icons. -->
+  <circle cx="170" cy="242" r="103" fill="url(#leftHalo)"/>
+  <circle cx="490" cy="242" r="103" fill="url(#rightHalo)"/>
+  <circle cx="170" cy="242" r="77" fill="#3156d9" fill-opacity="0.018" stroke="#5f7cf2" stroke-opacity="0.11"/>
+  <circle cx="490" cy="242" r="77" fill="none" stroke="#ffffff" stroke-opacity="0.022"/>
+  <path d="M170 151V157M170 327V333M79 242H85M255 242H261" stroke="#6380fa" stroke-opacity="0.46"/>
+  <path d="M490 151V157M490 327V333M399 242H405M575 242H581" stroke="#ffffff" stroke-opacity="0.08"/>
+
+  <!-- The Focus Gate: a single deliberate movement from app to destination. -->
+  <path d="M244 242H420" stroke="#3156d9" stroke-opacity="0.28" stroke-width="10" stroke-linecap="round" filter="url(#gateGlow)"/>
+  <path d="M244 242H416" stroke="url(#gate)" stroke-width="2" stroke-linecap="round"/>
+  <path d="M410 236L418 242L410 248" fill="none" stroke="#93a7ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="267" cy="242" r="2" fill="#5d79f5"/>
+  <circle cx="331" cy="242" r="2" fill="#6c86f8"/>
+  <circle cx="395" cy="242" r="2" fill="#8096fa"/>
+  <text x="330" y="269" fill="#7e8490" text-anchor="middle"
+        font-family="Avenir Next, sans-serif" font-size="8.5" font-weight="600" letter-spacing="2.25">
+    DROP TO INSTALL
+  </text>
+
+  <!-- Finder renders dark icon labels over picture backgrounds. These satin
+       ledger tabs provide a measured, high-contrast landing surface while
+       remaining visually subordinate to the icons. -->
+  <g filter="url(#plateShadow)">
+    <rect x="111" y="302" width="118" height="28" rx="7" fill="url(#labelPlate)" stroke="#ffffff" stroke-opacity="0.24"/>
+    <rect x="431" y="302" width="118" height="28" rx="7" fill="url(#labelPlate)" stroke="#ffffff" stroke-opacity="0.24"/>
+  </g>
+  <path d="M119 309V323" stroke="#3156d9" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M439 309V323" stroke="#8c8d90" stroke-width="2.5" stroke-linecap="round"/>
+
+  <line x1="60" y1="383.5" x2="600" y2="383.5" stroke="#ffffff" stroke-opacity="0.07"/>
+  <text x="60" y="406" fill="#6e727d" font-family="Avenir Next, sans-serif" font-size="8.5" font-weight="600" letter-spacing="1.55">
+    COBALT LEDGER · 0.1.0
+  </text>
+  <text x="600" y="406" fill="#6e727d" text-anchor="end" font-family="Avenir Next, sans-serif" font-size="8.5" font-weight="600" letter-spacing="1.55">
+    macOS · APPLE SILICON
+  </text>
+</svg>

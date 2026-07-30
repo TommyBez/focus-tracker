@@ -1,0 +1,665 @@
+<!--
+  Cobalt Ledger
+
+  A single native workspace with two registers: today's task ledger and
+  the focus ledger. The controlled split is the Focus Gate: committing to
+  a block contracts the task rail and gives the timer room to breathe.
+-->
+<stack>
+  <column background="background" grow="1">
+    <!-- Unified macOS titlebar. Plain chrome remains draggable while the
+         controls keep their ordinary press and keyboard behavior. -->
+    <row window-drag="true" height="{headerHeight}" padding="12" gap="12" cross="center">
+      <spacer width="{chromeLeading}" />
+      <column width="8" height="8" background="accent" radius="sm" />
+      <text><span weight="bold">Focus</span></text>
+
+      <tabs label="Workspace sections" gap="2">
+        <toggle-button
+          size="sm"
+          variant="ghost"
+          selected="{section == 'today'}"
+          on-toggle="show_today"
+        >Today</toggle-button>
+        <toggle-button
+          size="sm"
+          variant="ghost"
+          selected="{section == 'ledger'}"
+          on-toggle="show_ledger"
+        >Ledger</toggle-button>
+      </tabs>
+
+      <spacer grow="1" />
+      <button size="sm" variant="ghost" on-press="open_settings">Settings</button>
+      <if test="{saving}">
+        <row gap="8" cross="center" label="Saving changes">
+          <spinner />
+          <text foreground="text_muted">Saving</text>
+        </row>
+      </if>
+      <if test="{hasWriteError}">
+        <badge variant="destructive">Not saved</badge>
+      </if>
+    </row>
+
+    <separator />
+
+    <!-- Boot state preserves the final geometry, preventing a blank flash
+         or a layout jump when the SQLite snapshot arrives. -->
+    <if test="{loadState == 'loading'}">
+      <row grow="1" label="Loading Focus Tracker local data">
+        <column width="380" background="surface_subtle" padding="16" gap="16">
+          <skeleton width="160" height="24" />
+          <skeleton width="348" height="36" />
+          <skeleton width="210" height="31" />
+          <column gap="8">
+            <skeleton width="348" height="48" />
+            <skeleton width="348" height="48" />
+            <skeleton width="348" height="48" />
+            <skeleton width="348" height="48" />
+          </column>
+        </column>
+        <separator />
+        <column grow="1" padding="32" gap="24" main="center" cross="center">
+          <row gap="8" cross="center" label="Opening local focus ledger">
+            <spinner />
+            <text foreground="text_muted">Opening local ledger</text>
+          </row>
+          <skeleton width="240" height="28" />
+          <skeleton width="360" height="76" />
+          <skeleton width="440" height="12" />
+          <skeleton width="260" height="40" />
+        </column>
+      </row>
+    </if>
+
+    <else>
+      <!-- A database that cannot open is a named, recoverable state. -->
+      <if test="{loadState == 'fatal'}">
+        <row grow="1" main="center" cross="center" padding="32">
+          <alert text="Focus Tracker could not open" width="520">
+            <column gap="16">
+              <text wrap="true" foreground="text_muted">{fatalErrorText}</text>
+              <row gap="8">
+                <button variant="primary" icon="refresh-cw" on-press="retry_boot">Try again</button>
+                <button variant="ghost" on-press="quit_app">Quit</button>
+              </row>
+            </column>
+          </alert>
+        </row>
+      </if>
+
+      <else>
+        <!-- Persistence failures stay visible beside the last
+             authoritative SQLite snapshot. The user controls retries. -->
+        <if test="{hasWriteError}">
+          <alert text="The latest change was not saved">
+            <column gap="8">
+              <text wrap="true" foreground="text_muted">{writeErrorText}</text>
+              <row>
+                <button size="sm" variant="outline" icon="refresh-cw" on-press="retry_save">Retry save</button>
+              </row>
+            </column>
+          </alert>
+        </if>
+
+        <if test="{section == 'today'}">
+          <split
+            grow="1"
+            gap="1"
+            value="{paneFraction}"
+            on-resize="pane_resized"
+            resize-duration="260"
+            resize-easing="spring"
+          >
+            <!-- TODAY: compact editorial ledger rather than a card grid. -->
+            <column min-width="320" background="surface_subtle" padding="16" gap="12">
+              <row gap="12" cross="center">
+                <column gap="2" grow="1">
+                  <text><span weight="bold">Today</span></text>
+                  <text foreground="text_muted">{todayLabel}</text>
+                </column>
+                <badge variant="secondary">{filterCountText}</badge>
+              </row>
+
+              <!-- Entering Focus Gate removes task-creation chrome from
+                   view while leaving the current queue readable. -->
+              <if test="{sessionState == 'idle' or sessionState == 'complete'}">
+                <row gap="8" cross="center">
+                  <text-field
+                    key="{composerKey}"
+                    grow="1"
+                    text="{taskDraft}"
+                    placeholder="Add a concrete next action"
+                    label="New task"
+                    autofocus="true"
+                    on-input="task_draft_edit"
+                    on-submit="add_task"
+                  />
+                  <button
+                    icon="plus"
+                    label="Add task"
+                    variant="secondary"
+                    disabled="{not canAddTask}"
+                    on-press="add_task"
+                  ></button>
+                </row>
+
+                <toggle-group label="Task filter" gap="2">
+                  <toggle-button
+                    size="sm"
+                    selected="{taskFilter == 'open'}"
+                    on-toggle="show_open_tasks"
+                  >Open</toggle-button>
+                  <toggle-button
+                    size="sm"
+                    selected="{taskFilter == 'completed'}"
+                    on-toggle="show_completed_tasks"
+                  >Completed</toggle-button>
+                  <toggle-button
+                    size="sm"
+                    selected="{taskFilter == 'archived'}"
+                    on-toggle="show_archived_tasks"
+                  >Archived</toggle-button>
+                </toggle-group>
+              </if>
+
+              <else>
+                <row background="surface" radius="md" padding="12" gap="10" cross="center">
+                  <if test="{isBreak}">
+                    <column width="4" height="28" background="accent" radius="sm" />
+                    <column gap="2" grow="1">
+                      <text><span weight="medium">Recovery Gate active</span></text>
+                      <text foreground="text_muted">The task composer returns when this break ends.</text>
+                    </column>
+                  </if>
+                  <else>
+                    <column width="4" height="28" background="accent" radius="sm" />
+                    <column gap="2" grow="1">
+                      <text><span weight="medium">Focus Gate active</span></text>
+                      <text foreground="text_muted">The task composer returns when this block ends.</text>
+                    </column>
+                  </else>
+                </row>
+              </else>
+
+              <scroll grow="1" overscroll="rubber_band">
+                <list gap="4" label="{taskListLabel}">
+                  <for each="visibleTasks" key="id" as="t">
+                    <list-item
+                      global-key="{t.id}"
+                      selected="{t.id == actionTaskId}"
+                      on-press="select_task:{t.id}"
+                      label="{t.title}"
+                    >
+                      <if test="{t.id == actionTaskId}">
+                        <column width="3" height="28" background="accent" radius="sm" />
+                      </if>
+                      <else>
+                        <spacer width="3" />
+                      </else>
+                      <spacer width="7" />
+                      <text width="28" foreground="text_muted">
+                        <span mono="true">{pad(t.position, 2)}</span>
+                      </text>
+                      <spacer width="10" />
+
+                      <if test="{t.archived}">
+                        <spacer width="18" />
+                      </if>
+                      <else>
+                        <checkbox
+                          checked="{t.done}"
+                          disabled="{saving or sessionState != 'idle'}"
+                          label="{t.toggleLabel}"
+                          on-toggle="toggle_task:{t.id}"
+                        />
+                      </else>
+                      <spacer width="10" />
+
+                        <if test="{t.id == editTaskId}">
+                          <text-field
+                            grow="1"
+                            text="{editDraft}"
+                            placeholder="Task title"
+                            label="{t.renameLabel}"
+                            autofocus="true"
+                            on-input="edit_draft_edit"
+                            on-submit="commit_rename"
+                          />
+                          <button
+                            icon="x"
+                            size="icon"
+                            variant="ghost"
+                            label="{t.cancelRenameLabel}"
+                            on-press="cancel_rename"
+                          ></button>
+                          <button
+                            icon="check"
+                            size="icon"
+                            variant="secondary"
+                            disabled="{not canCommitRename}"
+                            label="{t.saveRenameLabel}"
+                            on-press="commit_rename"
+                          ></button>
+                        </if>
+
+                        <else>
+                          <column gap="2" grow="1">
+                            <if test="{t.done}">
+                              <text foreground="text_muted" overflow="ellipsis">{t.title}</text>
+                            </if>
+                            <else>
+                              <text overflow="ellipsis">{t.title}</text>
+                            </else>
+                            <if test="{t.hasMeta}">
+                              <text foreground="text_muted" overflow="ellipsis">{t.meta}</text>
+                            </if>
+                          </column>
+
+                          <if test="{t.archived}">
+                            <badge variant="secondary">Archived</badge>
+                          </if>
+                        </else>
+                      <context-menu>
+                        <if test="{t.archived}">
+                          <menu-item
+                            disabled="{saving or sessionState != 'idle'}"
+                            on-press="restore_task:{t.id}"
+                          >{t.restoreLabel}</menu-item>
+                          <separator />
+                          <menu-item
+                            disabled="{saving or sessionState != 'idle'}"
+                            on-press="request_purge_task:{t.id}"
+                          >{t.purgeLabel}</menu-item>
+                        </if>
+                        <else>
+                          <if test="{not t.done}">
+                            <menu-item
+                              disabled="{saving or sessionState != 'idle'}"
+                              on-press="start_focus_task:{t.id}"
+                            >{t.focusLabel}</menu-item>
+                          </if>
+                          <menu-item
+                            disabled="{saving or sessionState != 'idle'}"
+                            on-press="begin_rename:{t.id}"
+                          >{t.renameLabel}</menu-item>
+                          <separator />
+                          <menu-item
+                            disabled="{saving or sessionState != 'idle'}"
+                            on-press="delete_task:{t.id}"
+                          >{t.archiveLabel}</menu-item>
+                        </else>
+                      </context-menu>
+                    </list-item>
+                  </for>
+
+                  <else>
+                    <column padding="32" gap="8" main="center" cross="center">
+                      <column width="32" height="3" background="text_muted" radius="sm" />
+                      <if test="{taskFilter == 'open'}">
+                        <text text-alignment="center"><span weight="bold">Name the next finish line.</span></text>
+                        <text width="240" wrap="true" text-alignment="center" foreground="text_muted">Add one task you can finish in a sitting.</text>
+                      </if>
+                      <if test="{taskFilter == 'completed'}">
+                        <text text-alignment="center"><span weight="bold">Nothing completed yet.</span></text>
+                        <text width="240" wrap="true" text-alignment="center" foreground="text_muted">Finished work will stay here without crowding the day.</text>
+                      </if>
+                      <if test="{taskFilter == 'archived'}">
+                        <text text-alignment="center"><span weight="bold">The archive is empty.</span></text>
+                        <text width="240" wrap="true" text-alignment="center" foreground="text_muted">Archived tasks remain recoverable whenever you need them.</text>
+                      </if>
+                    </column>
+                  </else>
+                </list>
+              </scroll>
+
+              <!-- One compact keyboard action register replaces repeated
+                   per-row controls and keeps essential actions out of the
+                   pointer-only context menu. -->
+              <if test="{hasActionTask and sessionState == 'idle'}">
+                <column background="surface" radius="md" padding="8" gap="6" label="Actions for current task">
+                  <row gap="8" cross="center">
+                    <column width="3" height="18" background="accent" radius="sm" />
+                    <text grow="1" overflow="ellipsis">{actionTaskTitle}</text>
+                  </row>
+                  <row gap="2" cross="center">
+                    <if test="{actionTaskIsOpen}">
+                      <button size="sm" variant="outline" label="{actionFocusLabel}" on-press="start_focus_task:{actionTaskId}">Focus</button>
+                      <button size="sm" variant="secondary" label="{actionDoneLabel}" on-press="toggle_task:{actionTaskId}">Done</button>
+                      <button size="sm" variant="ghost" label="{actionRenameLabel}" on-press="begin_rename:{actionTaskId}">Rename</button>
+                      <button size="sm" variant="ghost" label="{actionArchiveLabel}" on-press="delete_task:{actionTaskId}">Archive</button>
+                    </if>
+                    <if test="{actionTaskIsCompleted}">
+                      <button size="sm" variant="outline" icon="refresh-cw" label="{actionReopenLabel}" on-press="toggle_task:{actionTaskId}">Reopen</button>
+                      <button size="sm" variant="ghost" icon="edit" label="{actionRenameLabel}" on-press="begin_rename:{actionTaskId}">Rename</button>
+                      <button size="sm" variant="ghost" icon="archive" label="{actionArchiveLabel}" on-press="delete_task:{actionTaskId}">Archive</button>
+                    </if>
+                    <if test="{actionTaskIsArchived}">
+                      <button size="sm" variant="outline" icon="refresh-cw" label="{actionRestoreLabel}" on-press="restore_task:{actionTaskId}">Restore</button>
+                      <button size="sm" variant="destructive" icon="trash" label="{actionPurgeLabel}" on-press="request_purge_task:{actionTaskId}">Delete</button>
+                    </if>
+                  </row>
+                </column>
+              </if>
+
+              <if test="{hasUndo}">
+                <row background="surface" radius="md" padding="8" gap="8" cross="center">
+                  <text grow="1" overflow="ellipsis">{undoText}</text>
+                  <button size="sm" variant="ghost" on-press="undo_delete">Undo</button>
+                  <button
+                    icon="x"
+                    size="icon"
+                    variant="ghost"
+                    label="Dismiss undo"
+                    on-press="dismiss_undo"
+                  ></button>
+                </row>
+              </if>
+
+            </column>
+
+            <!-- FOCUS: an intentionally sparse instrument panel. -->
+            <row min-width="500" grow="1">
+              <column width="4" background="accent" />
+              <column grow="1" padding="32" gap="16">
+              <row gap="12" cross="center">
+                <if test="{isBreak}">
+                  <text foreground="text_muted"><span weight="medium">RECOVERY GATE</span></text>
+                </if>
+                <else>
+                  <text foreground="text_muted"><span weight="medium">FOCUS GATE</span></text>
+                </else>
+                <spacer grow="1" />
+                <if test="{sessionState == 'running'}">
+                  <if test="{isBreak}">
+                    <badge variant="secondary">ON BREAK</badge>
+                  </if>
+                  <else>
+                    <badge variant="primary">FOCUSING</badge>
+                  </else>
+                </if>
+                <if test="{sessionState == 'paused'}">
+                  <badge variant="secondary">PAUSED</badge>
+                </if>
+                <if test="{sessionState == 'complete'}">
+                  <badge variant="secondary">RECORDED</badge>
+                </if>
+                <if test="{sessionState == 'idle'}">
+                  <text foreground="text_muted">One task. One block.</text>
+                </if>
+              </row>
+
+              <separator />
+
+              <if test="{sessionState == 'idle'}">
+                <if test="{selectedTaskExists}">
+                  <column grow="1" gap="20" main="center" cross="center">
+                    <column width="40" height="4" background="accent" radius="sm" />
+                    <text width="400" wrap="true" size="heading" text-alignment="center">{focusTaskTitle}</text>
+                    <text width="400" wrap="true" text-alignment="center" foreground="text_muted">Protect one uninterrupted block for this task.</text>
+
+                    <toggle-group label="Focus length" gap="2">
+                      <toggle-button
+                        size="sm"
+                        selected="{focusLengthMinutes == 25}"
+                        disabled="{saving}"
+                        on-toggle="set_duration_25"
+                      >25 min</toggle-button>
+                      <toggle-button
+                        size="sm"
+                        selected="{focusLengthMinutes == 50}"
+                        disabled="{saving}"
+                        on-toggle="set_duration_50"
+                      >50 min</toggle-button>
+                      <toggle-button
+                        size="sm"
+                        selected="{focusLengthMinutes == 90}"
+                        disabled="{saving}"
+                        on-toggle="set_duration_90"
+                      >90 min</toggle-button>
+                    </toggle-group>
+
+                    <button variant="primary" icon="play" disabled="{saving}" on-press="start_focus">Commit {focusLengthMinutes} minutes</button>
+                  </column>
+                </if>
+
+                <else>
+                  <column grow="1" gap="12" main="center" cross="center">
+                    <column width="40" height="4" background="text_muted" radius="sm" />
+                    <text size="heading" text-alignment="center">Choose one task worth protecting.</text>
+                    <if test="{taskFilter == 'open'}">
+                      <text width="400" wrap="true" text-alignment="center" foreground="text_muted">Select an open task, then commit a quiet block to it.</text>
+                    </if>
+                    <else>
+                      <text width="400" wrap="true" text-alignment="center" foreground="text_muted">Return to Open tasks to focus.</text>
+                      <button variant="outline" on-press="show_open_tasks">Open tasks</button>
+                    </else>
+                  </column>
+                </else>
+              </if>
+
+              <if test="{sessionState == 'running'}">
+                <column grow="1" gap="18" main="center" cross="center">
+                  <text width="400" wrap="true" text-alignment="center">{focusTaskTitle}</text>
+                  <text size="display" text-alignment="center" label="{timerA11y}"><span mono="true" weight="medium" scale="1.6">{pad(remainingMinutes, 2)}:{pad(remainingSeconds, 2)}</span></text>
+                  <if test="{isBreak}">
+                    <progress width="400" value="{focusProgress}" label="Break progress" />
+                  </if>
+                  <else>
+                    <progress width="400" value="{focusProgress}" label="Focus block progress" />
+                  </else>
+                  <text foreground="text_muted">{endsAtText}</text>
+                  <row gap="8">
+                    <button variant="secondary" icon="pause" disabled="{saving}" on-press="pause_focus">Pause</button>
+                    <if test="{isBreak}">
+                      <button variant="ghost" disabled="{saving}" on-press="request_end_focus">End break</button>
+                    </if>
+                    <else>
+                      <button variant="ghost" disabled="{saving}" on-press="request_end_focus">End session</button>
+                    </else>
+                  </row>
+                </column>
+              </if>
+
+              <if test="{sessionState == 'paused'}">
+                <column grow="1" gap="18" main="center" cross="center">
+                  <text width="400" wrap="true" text-alignment="center">{focusTaskTitle}</text>
+                  <text size="display" text-alignment="center" label="{timerA11y}"><span mono="true" weight="medium" scale="1.6">{pad(remainingMinutes, 2)}:{pad(remainingSeconds, 2)}</span></text>
+                  <if test="{isBreak}">
+                    <progress width="400" value="{focusProgress}" label="Break progress" />
+                    <text foreground="text_muted">This break is paused. Your remaining time is preserved.</text>
+                  </if>
+                  <else>
+                    <progress width="400" value="{focusProgress}" label="Focus block progress" />
+                    <text foreground="text_muted">This block is paused. Your remaining time is preserved.</text>
+                  </else>
+                  <row gap="8">
+                    <button variant="primary" icon="play" disabled="{saving}" on-press="resume_focus">Resume</button>
+                    <if test="{isBreak}">
+                      <button variant="ghost" disabled="{saving}" on-press="request_end_focus">End break</button>
+                    </if>
+                    <else>
+                      <button variant="ghost" disabled="{saving}" on-press="request_end_focus">End session</button>
+                    </else>
+                  </row>
+                </column>
+              </if>
+
+              <if test="{sessionState == 'complete'}">
+                <column grow="1" gap="16" main="center" cross="center">
+                  <column width="40" height="4" background="success" radius="sm" />
+                  <text size="heading" text-alignment="center">Block complete.</text>
+                  <text width="400" wrap="true" text-alignment="center" foreground="text_muted">{completionSummary}</text>
+                </column>
+              </if>
+
+              <separator />
+              <row gap="12" cross="center">
+                <text grow="1" foreground="text_muted">Closing this window keeps an active block running.</text>
+              </row>
+            </column>
+            </row>
+          </split>
+        </if>
+
+        <else>
+          <!-- LEDGER: one editorial column and one meaningful chart. -->
+          <scroll grow="1" overscroll="rubber_band" on-reach-end="load_more_history">
+            <column padding="32" gap="24">
+              <row main="center">
+                <column width="800" gap="24">
+                  <row gap="24" cross="end">
+                    <column gap="6" grow="1">
+                      <text size="heading">Focus ledger</text>
+                      <text wrap="true" foreground="text_muted">A factual record of protected time, without scores or streaks.</text>
+                    </column>
+                    <column gap="2" cross="end">
+                      <text size="display" label="{focusedWeekText}"><span mono="true" weight="medium" scale="1.1">{focusedWeekText}</span></text>
+                      <text foreground="text_muted">in the last seven days</text>
+                      <badge variant="secondary">{todayGoalText}</badge>
+                    </column>
+                  </row>
+
+                  <row gap="12" cross="center">
+                    <text grow="1"><span weight="medium">Seven-day rhythm</span></text>
+                    <badge variant="secondary">{weekSessionText}</badge>
+                  </row>
+
+                  <if test="{hasWeekFocus}">
+                    <chart width="800" height="132" y-min="0" grid-lines="2" hover-details="true" label="Focus minutes by day">
+                      <series kind="bar" values="{weekMinutes}" color="accent" label="Minutes" />
+                    </chart>
+                  </if>
+                  <else>
+                    <row background="surface_subtle" radius="md" padding="12" gap="10" cross="center" label="No focus recorded in the last seven days">
+                      <column width="3" height="18" background="text_muted" radius="sm" />
+                      <text grow="1" foreground="text_muted">No focus recorded this week</text>
+                    </row>
+                  </else>
+
+                  <row main="space_between">
+                    <for each="weekDays" key="id" as="d">
+                      <column width="88" gap="2" cross="center" label="{d.accessibilityLabel}">
+                        <if test="{d.today}">
+                          <badge variant="secondary">{d.label}</badge>
+                        </if>
+                        <else>
+                          <text foreground="text_muted">{d.label}</text>
+                        </else>
+                        <text size="sm" foreground="text_muted"><span mono="true">{d.valueText}</span></text>
+                      </column>
+                    </for>
+                  </row>
+
+                  <separator />
+
+                  <row gap="12" cross="center">
+                    <text grow="1"><span weight="medium">Recent blocks</span></text>
+                    <text foreground="text_muted">Newest first</text>
+                  </row>
+
+                  <if test="{hasHistory}">
+                    <timeline gap="4" label="Focus session history">
+                      <for each="historySessions" key="id" as="s">
+                        <timeline-item
+                          global-key="{s.id}"
+                          title="{s.taskTitle}"
+                          description="{s.durationLabel}"
+                          meta="{s.meta}"
+                          variant="{s.tone}"
+                          connector="{s.connector}"
+                        />
+                      </for>
+                    </timeline>
+
+                    <if test="{historyLoadingMore}">
+                      <row gap="8" main="center" cross="center" padding="16" label="Loading more sessions">
+                        <spinner />
+                        <text foreground="text_muted">Loading more</text>
+                      </row>
+                    </if>
+                  </if>
+
+                  <else>
+                    <column padding="40" gap="10" main="center" cross="center">
+                      <column width="32" height="3" background="text_muted" radius="sm" />
+                      <text text-alignment="center"><span weight="bold">Your focus ledger is blank.</span></text>
+                      <text width="360" wrap="true" text-alignment="center" foreground="text_muted">Complete one block and its time will appear here.</text>
+                      <button variant="primary" on-press="show_today">Return to Today</button>
+                    </column>
+                  </else>
+                </column>
+              </row>
+            </column>
+          </scroll>
+        </else>
+      </else>
+    </else>
+  </column>
+
+  <!-- Ending early is the one destructive timer action that asks. -->
+  <if test="{mainEndDialogOpen and not isBreak}">
+    <column main="center" cross="center">
+      <dialog text="Leave this focus block?" width="440" padding="24" on-dismiss="cancel_end_focus">
+        <column gap="16">
+          <spacer height="32" />
+          <text wrap="true" foreground="text_muted">Finish now to record the focused time so far, or discard this unfinished block.</text>
+          <button variant="primary" icon="check" disabled="{saving}" on-press="finish_focus_now">Finish and record</button>
+          <button variant="destructive" disabled="{saving}" on-press="confirm_end_focus">Discard session</button>
+          <button variant="ghost" on-press="cancel_end_focus">Keep focusing</button>
+        </column>
+      </dialog>
+    </column>
+  </if>
+
+  <if test="{mainEndDialogOpen and isBreak}">
+    <column main="center" cross="center">
+      <dialog text="Leave this break?" width="440" padding="24" on-dismiss="cancel_end_focus">
+        <column gap="16">
+          <spacer height="32" />
+          <text wrap="true" foreground="text_muted">Finish now to record the rest you took, or discard this unfinished break.</text>
+          <button variant="primary" icon="check" disabled="{saving}" on-press="finish_focus_now">Finish and record</button>
+          <button variant="destructive" disabled="{saving}" on-press="confirm_end_focus">Discard break</button>
+          <button variant="ghost" on-press="cancel_end_focus">Keep resting</button>
+        </column>
+      </dialog>
+    </column>
+  </if>
+
+  <!-- Completion is calm and explicit: record the block, then decide
+       what should happen to the task. -->
+  <if test="{mainCompletionDialogOpen}">
+    <column main="center" cross="center">
+      <dialog text="Focus block complete" width="480" padding="24" on-dismiss="dismiss_completion">
+        <column gap="16">
+          <spacer height="32" />
+          <text wrap="true">{completionSummary}</text>
+          <button variant="primary" icon="check" disabled="{saving}" on-press="complete_task_after_focus">Mark task complete</button>
+          <button variant="secondary" disabled="{saving}" on-press="keep_task_open_after_focus">Keep task open</button>
+          <button variant="ghost" icon="clock" disabled="{saving}" on-press="start_break">Start next break</button>
+        </column>
+      </dialog>
+    </column>
+  </if>
+
+  <!-- Permanent deletion is deliberately archive-only and explicit.
+       Focus totals survive; the task identity does not. -->
+  <if test="{purgeDialogOpen}">
+    <column grow="1" padding="32" main="center" cross="center">
+      <dialog text="Delete this task permanently?" width="500" padding="24" on-dismiss="cancel_purge_task">
+        <column gap="16">
+          <spacer height="32" />
+          <text><span weight="bold">{purgeTaskTitle}</span></text>
+          <text wrap="true">This removes the task from your archive and cannot be undone.</text>
+          <text wrap="true" foreground="text_muted">Recorded focus time stays in the Ledger, but the task name and its session association are removed.</text>
+          <row gap="8" main="end">
+            <button variant="ghost" disabled="{saving}" on-press="cancel_purge_task">Cancel</button>
+            <button variant="destructive" disabled="{saving}" on-press="confirm_purge_task">Delete permanently</button>
+          </row>
+          <spacer height="8" />
+        </column>
+      </dialog>
+    </column>
+  </if>
+</stack>

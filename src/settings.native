@@ -1,0 +1,84 @@
+<!--
+  A standard model-declared macOS Settings window. Every choice commits
+  immediately through the same authoritative SQLite snapshot as the main
+  window; there is intentionally no Apply, Done, or dismissal row.
+-->
+<column background="background" grow="1" padding="24" gap="14" label="Focus Tracker settings">
+  <row gap="20" cross="center">
+    <column gap="3" grow="1">
+      <text><span weight="medium">Completion sound</span></text>
+      <text size="sm" foreground="text_muted">Chime when a focus block ends</text>
+    </column>
+    <switch
+      checked="{soundEnabled}"
+      disabled="{saving}"
+      label="Play completion sound"
+      on-toggle="toggle_sound"
+    />
+  </row>
+
+  <separator />
+
+  <row gap="20" cross="center">
+    <column gap="3" grow="1">
+      <text><span weight="medium">Short break</span></text>
+      <text size="sm" foreground="text_muted">Offered after a focus block</text>
+    </column>
+    <toggle-group label="Short break length" gap="2">
+      <toggle-button size="sm" selected="{shortBreakMinutes == 5}" disabled="{saving}" on-toggle="set_short_break_5">5 min</toggle-button>
+      <toggle-button size="sm" selected="{shortBreakMinutes == 10}" disabled="{saving}" on-toggle="set_short_break_10">10 min</toggle-button>
+      <toggle-button size="sm" selected="{shortBreakMinutes == 15}" disabled="{saving}" on-toggle="set_short_break_15">15 min</toggle-button>
+    </toggle-group>
+  </row>
+
+  <separator />
+
+  <row gap="20" cross="center">
+    <column gap="3" grow="1">
+      <text><span weight="medium">Long break</span></text>
+      <text size="sm" foreground="text_muted">Offered after every fourth block</text>
+    </column>
+    <toggle-group label="Long break length" gap="2">
+      <toggle-button size="sm" selected="{longBreakMinutes == 15}" disabled="{saving}" on-toggle="set_long_break_15">15 min</toggle-button>
+      <toggle-button size="sm" selected="{longBreakMinutes == 20}" disabled="{saving}" on-toggle="set_long_break_20">20 min</toggle-button>
+      <toggle-button size="sm" selected="{longBreakMinutes == 30}" disabled="{saving}" on-toggle="set_long_break_30">30 min</toggle-button>
+    </toggle-group>
+  </row>
+
+  <separator />
+
+  <row gap="20" cross="center">
+    <column gap="3" grow="1">
+      <text><span weight="medium">Daily focus goal</span></text>
+      <text size="sm" foreground="text_muted">Context without streaks or scoring</text>
+    </column>
+    <toggle-group label="Daily focus goal" gap="2">
+      <toggle-button size="sm" selected="{dailyGoalMinutes == 60}" disabled="{saving}" on-toggle="set_daily_goal_60">1 h</toggle-button>
+      <toggle-button size="sm" selected="{dailyGoalMinutes == 120}" disabled="{saving}" on-toggle="set_daily_goal_120">2 h</toggle-button>
+      <toggle-button size="sm" selected="{dailyGoalMinutes == 180}" disabled="{saving}" on-toggle="set_daily_goal_180">3 h</toggle-button>
+    </toggle-group>
+  </row>
+
+  <spacer grow="1" />
+
+  <if test="{saving}">
+    <row height="32" gap="8" cross="center" label="Saving settings">
+      <spinner />
+      <text size="sm" foreground="text_muted">Saving</text>
+    </row>
+  </if>
+  <else>
+    <if test="{hasWriteError}">
+      <row height="32" gap="8" cross="center" label="Settings were not saved">
+        <badge variant="destructive">Not saved</badge>
+        <spacer grow="1" />
+        <button size="sm" variant="outline" icon="refresh-cw" on-press="retry_save">Retry</button>
+      </row>
+    </if>
+    <else>
+      <row height="32" cross="center" label="Settings saved locally">
+        <text size="sm" foreground="text_muted">Saved locally</text>
+      </row>
+    </else>
+  </else>
+</column>

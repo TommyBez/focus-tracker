@@ -1,0 +1,24 @@
+# Editor and dependency state
+.DS_Store
+node_modules/
+
+# Native SDK / Zig build output
+.native/
+.zig-cache/
+zig-out/
+zig-pkg/
+build/
+dist/
+
+# Local persistence and automation evidence
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+.native-automation/
+automation-artifacts/
+
+# Local environment files
+.env
+.env.*
+!.env.example
