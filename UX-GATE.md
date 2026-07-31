@@ -149,3 +149,46 @@ the available computer-use harness explicitly refuses control of Codex Desktop.
 A separate attempted blind run also lost its Focus window and was invalidated
 instead of being scored. The earlier screenshot-only A/B remains withdrawn and
 supplies no UX score, preference, or AAA claim.
+
+## Gate closeout checkpoint — 2026-07-31
+
+The delegated closeout started from clean commit
+`8ba22254890c30c282113b1cca37d1337a90d591`. The supplied worktree was detached
+at that commit rather than attached to
+`codex/focus-tracker-ux-checkpoint-20260731`; no branch switch or history rewrite
+was performed.
+
+A ReleaseFast automation build was launched against the isolated data directory
+`/private/tmp/focus-tracker-ux-gate-019fb972`. An initial Computer Use attempt
+was invalidated immediately because its accessibility tree showed four tasks
+while the instrumented process showed zero; no cross-instance observation was
+used as product evidence. The valid single-process run used publisher PID
+`25000`, then PID `27021` after relaunch, and the unique task sentinel
+`UX gate sentinel 019fb972` was present in the visible widget state and SQLite.
+
+The valid run re-exercised the critical path across F1-F8: create and select the
+sentinel, start, pause, open Quick Focus, resume the same session, quit cleanly,
+relaunch on the same database, recover the running session, open the explicit
+end confirmation, dismiss it with Escape, record elapsed focus, start/pause/
+resume/end and record a break, inspect Ledger, and change Settings from 25 to
+50 minutes using Tab and Space. Escape closed Settings; reopening created a new
+window with 50 minutes as the sole selected and focused value. The final SQLite
+rows contained one recorded focus session linked to the sentinel and one
+recorded break, no live session, the 50-minute preference, and
+`PRAGMA integrity_check=ok`. Every retained runtime checkpoint reported
+`dispatch_errors=0`, with input latency inside the reported 8.33 ms budget.
+
+F9 remains supported by the complete recovery evidence already recorded above
+and by the current 52/52 native test pass, including retry-slot/deadline and
+SQLite failure coverage; this closeout introduced no new product behavior or
+reproducible blocker. F10 remains the unchanged installed-artifact PASS above:
+no product file changed, so the published DMG and its verified identity did not
+become obsolete and were not regenerated.
+
+The current technical gate passes: `native build -Dautomation=true`, all 11/11
+`native test` build steps and 52/52 tests, all three strict markup/model checks,
+and `native validate app.zon`. The visual gate was not rescored. The Focus-only
+UX gate passes. The comparative gate is finally `NO RESULT`: a fresh attempt to
+attach the same Computer Use judge to Codex Desktop returned the explicit
+policy error `Computer Use is not allowed to use the app 'com.openai.codex' for
+safety reasons.` No comparative PASS, score, or preference is claimed.
