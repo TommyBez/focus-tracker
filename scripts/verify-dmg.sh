@@ -8,6 +8,7 @@ readonly REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)"
 readonly PLIST_BUDDY="/usr/libexec/PlistBuddy"
 readonly EXPECTED_BACKGROUND_WIDTH=660
 readonly EXPECTED_BACKGROUND_HEIGHT=430
+readonly BUNDLE_README_LINE="Local ad-hoc signed Native SDK macOS app bundle; not Developer ID signed or notarized."
 
 SOURCE_APP="$REPO_ROOT/zig-out/package/focus-tracker.app"
 EXPECTED_APP_NAME="Focus Tracker.app"
@@ -127,7 +128,7 @@ done
 
 [[ -n "$DMG_PATH" ]] || die "a DMG path is required"
 
-for tool in hdiutil diskutil plutil codesign lipo shasum awk file sips readlink GetFileInfo realpath; do
+for tool in hdiutil diskutil plutil codesign lipo shasum awk grep file sips readlink GetFileInfo realpath; do
   require_command "$tool"
 done
 [[ -x "$PLIST_BUDDY" ]] || die "required command not found: $PLIST_BUDDY"
@@ -194,6 +195,11 @@ pass "mounted volume name is $MOUNTED_VOLUME_NAME"
 
 MOUNTED_APP="$MOUNT_POINT/$EXPECTED_APP_NAME"
 [[ -d "$MOUNTED_APP" ]] || die "mounted image is missing $EXPECTED_APP_NAME"
+MOUNTED_BUNDLE_README="$MOUNTED_APP/Contents/Resources/README.txt"
+[[ -f "$MOUNTED_BUNDLE_README" ]] || die "mounted app is missing Contents/Resources/README.txt"
+grep -Fqx "$BUNDLE_README_LINE" "$MOUNTED_BUNDLE_README" || \
+  die "mounted app README does not describe its ad-hoc signing state accurately"
+pass "mounted app accurately discloses local ad-hoc signing"
 [[ -L "$MOUNT_POINT/Applications" ]] || die "mounted image is missing the Applications symlink"
 APPLICATIONS_TARGET="$(readlink "$MOUNT_POINT/Applications")"
 [[ "$APPLICATIONS_TARGET" == "/Applications" ]] || die "Applications symlink targets '$APPLICATIONS_TARGET', expected '/Applications'"
@@ -300,13 +306,13 @@ MOUNTED_CDHASH="$(codesign -dvvv "$MOUNTED_APP" 2>&1 | awk -F= '/^CDHash=/ {prin
 pass "outer app CDHash matches source: $MOUNTED_CDHASH"
 
 codesign --verify --deep --strict --verbose=2 "$MOUNTED_APP"
-SIGNING_INFO="$(codesign -dvv "$MOUNTED_APP" 2>&1)"
-if printf '%s\n' "$SIGNING_INFO" | grep -q 'Signature=adhoc'; then
-  SIGNING_DESCRIPTION="ad-hoc (local build; not notarized)"
-else
-  SIGNING_DESCRIPTION="non-ad-hoc identity (notarization not assessed by this script)"
-fi
-pass "code signature is structurally valid: $SIGNING_DESCRIPTION"
+SOURCE_SIGNING_INFO="$(codesign -dvvv "$SOURCE_APP" 2>&1)"
+MOUNTED_SIGNING_INFO="$(codesign -dvvv "$MOUNTED_APP" 2>&1)"
+printf '%s\n' "$SOURCE_SIGNING_INFO" | grep -q '^Signature=adhoc$' || \
+  die "source app is not ad-hoc signed despite the local-release disclosure"
+printf '%s\n' "$MOUNTED_SIGNING_INFO" | grep -q '^Signature=adhoc$' || \
+  die "mounted app is not ad-hoc signed despite the local-release disclosure"
+pass "code signature is structurally valid and ad-hoc (local build; not notarized)"
 
 hdiutil detach "$MOUNT_POINT" >/dev/null
 IMAGE_ATTACHED=0

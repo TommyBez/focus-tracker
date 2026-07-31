@@ -15,6 +15,7 @@ pub const load_command = "focus.db.load";
 pub const task_create_command = "focus.db.task.create";
 pub const task_rename_command = "focus.db.task.rename";
 pub const task_set_state_command = "focus.db.task.set_state";
+pub const task_undo_archive_command = "focus.db.task.undo_archive";
 pub const task_purge_command = "focus.db.task.purge";
 pub const settings_set_command = "focus.db.settings.set";
 pub const timer_start_command = "focus.db.timer.start";
@@ -42,6 +43,7 @@ const Error = error{
     InvalidTitle,
     InvalidSettings,
     InvalidTaskState,
+    UndoStateMismatch,
     InvalidTimer,
     TaskLimitReached,
     TaskNotFound,
@@ -194,6 +196,7 @@ pub const SqliteExtension = struct {
         if (std.mem.eql(u8, name, task_create_command)) return self.mutate(.task_create, payload);
         if (std.mem.eql(u8, name, task_rename_command)) return self.mutate(.task_rename, payload);
         if (std.mem.eql(u8, name, task_set_state_command)) return self.mutate(.task_set_state, payload);
+        if (std.mem.eql(u8, name, task_undo_archive_command)) return self.mutate(.task_undo_archive, payload);
         if (std.mem.eql(u8, name, task_purge_command)) return self.mutate(.task_purge, payload);
         if (std.mem.eql(u8, name, settings_set_command)) return self.mutate(.settings_set, payload);
         if (std.mem.eql(u8, name, timer_start_command)) return self.mutate(.timer_start, payload);
@@ -219,6 +222,7 @@ pub const SqliteExtension = struct {
             error.InvalidTitle => "invalid_title",
             error.InvalidSettings => "invalid_settings",
             error.InvalidTaskState => "invalid_task_state",
+            error.UndoStateMismatch => "undo_state_mismatch",
             error.InvalidTimer => "invalid_timer",
             error.TaskLimitReached => "task_limit_reached",
             error.TaskNotFound => "task_not_found",
@@ -238,6 +242,7 @@ pub const SqliteExtension = struct {
         task_create,
         task_rename,
         task_set_state,
+        task_undo_archive,
         task_purge,
         settings_set,
         timer_start,
@@ -291,6 +296,7 @@ pub const SqliteExtension = struct {
             .task_create => try self.createTask(&reader, now_ms),
             .task_rename => try self.renameTask(&reader, now_ms),
             .task_set_state => try self.setTaskState(&reader, now_ms),
+            .task_undo_archive => try self.undoArchiveTask(&reader, now_ms),
             .task_purge => try self.purgeTask(&reader),
             .settings_set => try self.setSettings(&reader),
             .timer_start => try self.startTimer(&reader, now_ms),
@@ -366,6 +372,40 @@ pub const SqliteExtension = struct {
         try self.bindU64(statement, 3, id);
         try self.stepDone(statement);
         if (c.sqlite3_changes(self.db.?) != 1) return error.TaskNotFound;
+    }
+
+    fn undoArchiveTask(self: *SqliteExtension, reader: *Reader, now_ms: u64) !void {
+        const id = try reader.safeU64();
+        const prior_state = try reader.readU8();
+        if (prior_state > 1) return error.UndoStateMismatch;
+
+        const lookup = try self.prepare(
+            "SELECT state,created_ms,completed_ms FROM tasks WHERE id=?1;",
+        );
+        defer _ = c.sqlite3_finalize(lookup);
+        try self.bindU64(lookup, 1, id);
+        const rc = c.sqlite3_step(lookup);
+        if (rc == c.SQLITE_DONE) return error.TaskNotFound;
+        if (rc != c.SQLITE_ROW) return self.sqliteFailure("undo_archive_lookup");
+        const current_state = try self.columnU32(lookup, 0);
+        const created_ms = try self.columnU64(lookup, 1);
+        const completed_ms = try self.columnU64(lookup, 2);
+        if (current_state != 2) return error.UndoStateMismatch;
+        if (prior_state == 0 and completed_ms != 0) return error.UndoStateMismatch;
+        if (prior_state == 1 and (completed_ms == 0 or completed_ms < created_ms)) {
+            return error.UndoStateMismatch;
+        }
+
+        const statement = try self.prepare(
+            \\UPDATE tasks SET state=?1,updated_ms=MAX(updated_ms,?2,created_ms)
+            \\WHERE id=?3 AND state=2;
+        );
+        defer _ = c.sqlite3_finalize(statement);
+        try self.bindU32(statement, 1, prior_state);
+        try self.bindU64(statement, 2, now_ms);
+        try self.bindU64(statement, 3, id);
+        try self.stepDone(statement);
+        if (c.sqlite3_changes(self.db.?) != 1) return error.UndoStateMismatch;
     }
 
     fn purgeTask(self: *SqliteExtension, reader: *Reader) !void {
@@ -701,13 +741,13 @@ pub const SqliteExtension = struct {
         }
 
         const recent_count = try self.scalarU32(
-            "SELECT COUNT(*) FROM (SELECT 1 FROM focus_sessions WHERE state IN (2,3) ORDER BY ended_ms DESC,id DESC LIMIT 14);",
+            "SELECT COUNT(*) FROM (SELECT 1 FROM focus_sessions WHERE state=2 ORDER BY ended_ms DESC,id DESC LIMIT 14);",
         );
         if (recent_count > max_recent_sessions) return error.CorruptDatabase;
         try writer.writeU32(recent_count);
         const recent = try self.prepare(
             \\SELECT id,task_id,mode,state,completion_reason,started_ms,ends_ms,remaining_ms,planned_ms,focused_ms,ended_ms
-            \\FROM focus_sessions WHERE state IN (2,3) ORDER BY ended_ms DESC,id DESC LIMIT 14;
+            \\FROM focus_sessions WHERE state=2 ORDER BY ended_ms DESC,id DESC LIMIT 14;
         );
         defer _ = c.sqlite3_finalize(recent);
         while (true) {
@@ -1453,6 +1493,83 @@ fn probeSnapshot(bytes: []const u8) !SnapshotProbe {
     };
 }
 
+const SnapshotTaskProbe = struct {
+    state: u8,
+    completed_ms: u64,
+};
+
+fn probeSnapshotTask(bytes: []const u8, expected_id: u64) !SnapshotTaskProbe {
+    var reader = Reader.init(bytes);
+    try reader.expectMagic("FCS2");
+    if (try reader.readU32() != snapshot_version) return error.UnsupportedVersion;
+    _ = try reader.readU64();
+    _ = try reader.take(4 * 4 + 1);
+    _ = try reader.readU64();
+    const task_count = try reader.readU32();
+    var task_index: u32 = 0;
+    while (task_index < task_count) : (task_index += 1) {
+        const id = try reader.readU64();
+        const state = try reader.readU8();
+        _ = try reader.readU32();
+        _ = try reader.readU32();
+        _ = try reader.readU64();
+        _ = try reader.readU64();
+        const completed_ms = try reader.readU64();
+        _ = try reader.bytesWithU32Length(max_title_bytes);
+        if (id == expected_id) return .{ .state = state, .completed_ms = completed_ms };
+    }
+    return error.TaskNotFound;
+}
+
+const SnapshotRecentProbe = struct {
+    count: u32,
+    ids: [14]u64,
+    states: [14]u8,
+    ended_ms: [14]u64,
+};
+
+fn probeSnapshotRecent(bytes: []const u8) !SnapshotRecentProbe {
+    var reader = Reader.init(bytes);
+    try reader.expectMagic("FCS2");
+    if (try reader.readU32() != snapshot_version) return error.UnsupportedVersion;
+    _ = try reader.readU64();
+    _ = try reader.take(4 * 4 + 1);
+    _ = try reader.readU64();
+    const task_count = try reader.readU32();
+    var task_index: u32 = 0;
+    while (task_index < task_count) : (task_index += 1) {
+        _ = try reader.take(8 + 1 + 4 + 4 + 8 + 8 + 8);
+        _ = try reader.bytesWithU32Length(max_title_bytes);
+    }
+    const active = try reader.readU8();
+    if (active > 1) return error.InvalidRequest;
+    if (active == 1) _ = try reader.take(8 + 8 + 1 + 1 + 1 + 8 * 6);
+
+    const count = try reader.readU32();
+    if (count > max_recent_sessions) return error.InvalidRequest;
+    var ids: [14]u64 = @splat(0);
+    var states: [14]u8 = @splat(0);
+    var ended_ms: [14]u64 = @splat(0);
+    var recent_index: u32 = 0;
+    while (recent_index < count) : (recent_index += 1) {
+        ids[recent_index] = try reader.readU64();
+        _ = try reader.readU64();
+        _ = try reader.readU8();
+        states[recent_index] = try reader.readU8();
+        _ = try reader.readU8();
+        _ = try reader.take(8 * 5);
+        ended_ms[recent_index] = try reader.readU64();
+    }
+    _ = try reader.readU64();
+    _ = try reader.readU32();
+    _ = try reader.readU32();
+    if (try reader.readU32() != 7) return error.InvalidRequest;
+    if (try reader.readU8() > 6) return error.InvalidRequest;
+    _ = try reader.take(7 * 8);
+    try reader.finish();
+    return .{ .count = count, .ids = ids, .states = states, .ended_ms = ended_ms };
+}
+
 test "SQLite extension migrates, persists authoritative tasks, and rejects stale revisions" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -1494,6 +1611,152 @@ test "SQLite extension migrates, persists authoritative tasks, and rejects stale
     const reopened_probe = try probeSnapshot(reopened);
     try std.testing.expectEqual(@as(u64, 1), reopened_probe.revision);
     try std.testing.expectEqual(@as(u32, 1), reopened_probe.task_count);
+}
+
+test "archive undo restores exact task state and completion timestamp" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
+    const data_dir = try testDataDir(&tmp, &path_buffer);
+    var extension = try SqliteExtension.init(std.testing.allocator, std.testing.io, data_dir);
+    defer extension.deinit();
+    try extension.startModule(.{ .platform_name = "macos" });
+
+    var request = Writer.init(std.testing.allocator);
+    defer request.deinit();
+
+    try appendMutationHeader(&request, 0, 1_000);
+    try request.writeU32(25);
+    try request.lengthPrefixed("Completed before archive");
+    extension.freeResponse(try extension.handleRequest(task_create_command, request.list.items));
+
+    request.list.clearRetainingCapacity();
+    try appendMutationHeader(&request, 1, 2_000);
+    try request.writeU64(1);
+    try request.writeU8(1);
+    extension.freeResponse(try extension.handleRequest(task_set_state_command, request.list.items));
+
+    request.list.clearRetainingCapacity();
+    try appendMutationHeader(&request, 2, 3_000);
+    try request.writeU64(1);
+    try request.writeU8(2);
+    extension.freeResponse(try extension.handleRequest(task_set_state_command, request.list.items));
+    try std.testing.expectEqual(@as(u64, 2_000), try extension.scalarU64(
+        "SELECT completed_ms FROM tasks WHERE id=1;",
+    ));
+
+    request.list.clearRetainingCapacity();
+    try appendMutationHeader(&request, 3, 4_000);
+    try request.writeU64(1);
+    try request.writeU8(1);
+    const completed_undo = try extension.handleRequest(task_undo_archive_command, request.list.items);
+    defer extension.freeResponse(completed_undo);
+    const completed_probe = try probeSnapshotTask(completed_undo, 1);
+    try std.testing.expectEqual(@as(u8, 1), completed_probe.state);
+    try std.testing.expectEqual(@as(u64, 2_000), completed_probe.completed_ms);
+    try std.testing.expectEqual(@as(u64, 2_000), try extension.scalarU64(
+        "SELECT completed_ms FROM tasks WHERE id=1;",
+    ));
+
+    request.list.clearRetainingCapacity();
+    try appendMutationHeader(&request, 4, 5_000);
+    try request.writeU32(25);
+    try request.lengthPrefixed("Open before archive");
+    extension.freeResponse(try extension.handleRequest(task_create_command, request.list.items));
+
+    request.list.clearRetainingCapacity();
+    try appendMutationHeader(&request, 5, 6_000);
+    try request.writeU64(2);
+    try request.writeU8(2);
+    extension.freeResponse(try extension.handleRequest(task_set_state_command, request.list.items));
+
+    request.list.clearRetainingCapacity();
+    try appendMutationHeader(&request, 6, 7_000);
+    try request.writeU64(2);
+    try request.writeU8(0);
+    const open_undo = try extension.handleRequest(task_undo_archive_command, request.list.items);
+    defer extension.freeResponse(open_undo);
+    const open_probe = try probeSnapshotTask(open_undo, 2);
+    try std.testing.expectEqual(@as(u8, 0), open_probe.state);
+    try std.testing.expectEqual(@as(u64, 0), open_probe.completed_ms);
+
+    request.list.clearRetainingCapacity();
+    try appendMutationHeader(&request, 7, 8_000);
+    try request.writeU64(2);
+    try request.writeU8(2);
+    extension.freeResponse(try extension.handleRequest(task_set_state_command, request.list.items));
+
+    request.list.clearRetainingCapacity();
+    try appendMutationHeader(&request, 8, 9_000);
+    try request.writeU64(2);
+    try request.writeU8(1);
+    try expectRequestError(&extension, error.UndoStateMismatch, task_undo_archive_command, request.list.items);
+    try std.testing.expectEqual(@as(u64, 8), try extension.currentRevision());
+    try std.testing.expectEqual(@as(u64, 2), try extension.scalarU64("SELECT state FROM tasks WHERE id=2;"));
+    try std.testing.expectEqual(@as(u64, 0), try extension.scalarU64("SELECT completed_ms FROM tasks WHERE id=2;"));
+
+    try extension.stopModule(.{ .platform_name = "macos" });
+    try extension.startModule(.{ .platform_name = "macos" });
+    request.list.clearRetainingCapacity();
+    try appendLoadRequest(&request, 10_000);
+    const reopened = try extension.handleRequest(load_command, request.list.items);
+    defer extension.freeResponse(reopened);
+    const reopened_completed = try probeSnapshotTask(reopened, 1);
+    const reopened_open = try probeSnapshotTask(reopened, 2);
+    try std.testing.expectEqual(@as(u8, 1), reopened_completed.state);
+    try std.testing.expectEqual(@as(u64, 2_000), reopened_completed.completed_ms);
+    try std.testing.expectEqual(@as(u8, 2), reopened_open.state);
+    try std.testing.expectEqual(@as(u64, 0), reopened_open.completed_ms);
+    try std.testing.expectEqual(@as(u64, 8), (try probeSnapshot(reopened)).revision);
+}
+
+test "recent snapshot limits completed sessions before newer cancellations" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
+    const data_dir = try testDataDir(&tmp, &path_buffer);
+    var extension = try SqliteExtension.init(std.testing.allocator, std.testing.io, data_dir);
+    defer extension.deinit();
+    try extension.startModule(.{ .platform_name = "macos" });
+
+    try extension.exec(
+        \\WITH RECURSIVE completed(value) AS (
+        \\  SELECT 1 UNION ALL SELECT value+1 FROM completed WHERE value<15
+        \\)
+        \\INSERT INTO focus_sessions(
+        \\  task_id,mode,state,completion_reason,live_slot,started_ms,last_transition_ms,
+        \\  ends_ms,remaining_ms,planned_ms,focused_ms,ended_ms
+        \\)
+        \\SELECT NULL,0,2,2,NULL,value,1000+value,0,0,1000,1000,1000+value FROM completed;
+        \\WITH RECURSIVE cancelled(value) AS (
+        \\  SELECT 1 UNION ALL SELECT value+1 FROM cancelled WHERE value<30
+        \\)
+        \\INSERT INTO focus_sessions(
+        \\  task_id,mode,state,completion_reason,live_slot,started_ms,last_transition_ms,
+        \\  ends_ms,remaining_ms,planned_ms,focused_ms,ended_ms
+        \\)
+        \\SELECT NULL,0,3,0,NULL,2000+value,3000+value,0,500,1000,500,3000+value FROM cancelled;
+    );
+    try extension.validateSchema();
+
+    var request = Writer.init(std.testing.allocator);
+    defer request.deinit();
+    try appendLoadRequest(&request, 10_000);
+    const snapshot = try extension.handleRequest(load_command, request.list.items);
+    defer extension.freeResponse(snapshot);
+    const recent = try probeSnapshotRecent(snapshot);
+    try std.testing.expectEqual(@as(u32, max_recent_sessions), recent.count);
+    try std.testing.expectEqual(@as(u64, 15), try extension.scalarU64(
+        "SELECT COUNT(*) FROM focus_sessions WHERE state=2;",
+    ));
+    try std.testing.expectEqual(@as(u64, 30), try extension.scalarU64(
+        "SELECT COUNT(*) FROM focus_sessions WHERE state=3;",
+    ));
+    for (0..14) |index| {
+        try std.testing.expectEqual(@as(u64, 15 - index), recent.ids[index]);
+        try std.testing.expectEqual(@as(u8, 2), recent.states[index]);
+        try std.testing.expectEqual(@as(u64, 1_015 - index), recent.ended_ms[index]);
+    }
 }
 
 test "timer commands use CAS and load recovers an expired running session" {

@@ -7,6 +7,7 @@ umask 022
 readonly SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)"
 readonly PLIST_BUDDY="/usr/libexec/PlistBuddy"
+readonly BUNDLE_README_LINE="Local ad-hoc signed Native SDK macOS app bundle; not Developer ID signed or notarized."
 
 # Finder's bounds include the title bar. A 458 px outer height leaves roughly
 # 430 px for the icon-view canvas used by the background artwork.
@@ -251,7 +252,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-for tool in ditto hdiutil osascript SetFile GetFileInfo sips lipo shasum awk du file codesign realpath find touch; do
+for tool in ditto hdiutil osascript SetFile GetFileInfo sips lipo shasum awk grep du file codesign realpath find touch; do
   require_command "$tool"
 done
 [[ -x "$PLIST_BUDDY" ]] || die "required command not found: $PLIST_BUDDY"
@@ -271,6 +272,10 @@ APP_BINARY="$APP_SOURCE/Contents/MacOS/$APP_EXECUTABLE"
 
 SOURCE_RESOURCE_DIR="$APP_SOURCE/Contents/Resources"
 [[ -d "$SOURCE_RESOURCE_DIR" ]] || die "source app has no Contents/Resources directory"
+SOURCE_BUNDLE_README="$SOURCE_RESOURCE_DIR/README.txt"
+[[ -f "$SOURCE_BUNDLE_README" ]] || die "source app has no Contents/Resources/README.txt"
+grep -Fqx "$BUNDLE_README_LINE" "$SOURCE_BUNDLE_README" || \
+  die "source app README does not describe its ad-hoc signing state accurately"
 SOURCE_PACKAGING_LEAKS="$(find "$SOURCE_RESOURCE_DIR" \
   \( -type f -name 'dmg-*' -o -path '*/packaging' -o -path '*/packaging/*' \) \
   -print)"
@@ -345,6 +350,10 @@ fi
 
 note "Verifying source application signature"
 codesign --verify --deep --strict --verbose=2 "$APP_SOURCE"
+SOURCE_SIGNING_INFO="$(codesign -dvvv "$APP_SOURCE" 2>&1)"
+printf '%s\n' "$SOURCE_SIGNING_INFO" | grep -q '^Signature=adhoc$' || \
+  die "source app is not ad-hoc signed; this local-release DMG cannot describe it truthfully"
+note "Source app has the required local ad-hoc signature"
 
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/focus-tracker-dmg.XXXXXX")"
 OUTPUT_TRANSACTION_DIR="$(mktemp -d "$OUTPUT_PARENT/.focus-tracker-dmg.XXXXXX")"

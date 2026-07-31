@@ -500,7 +500,7 @@ export function decodeSnapshot(data: Bytes): SnapshotDecode {
   if (recentCount <= MAX_RECENT_SESSIONS) {
     for (let i = 0; i < recentCount; i++) {
       const session = reader.session();
-      if (session.state !== "completed" && session.state !== "cancelled") reader.failed = true;
+      if (session.state !== "completed") reader.failed = true;
       recentSessions.push(session);
     }
   }
@@ -577,6 +577,20 @@ export function encodeTaskRename(revision: number, nowMs: number, taskId: number
 }
 
 export function encodeTaskState(revision: number, nowMs: number, taskId: number, state: TaskState): Bytes {
+  const out = new Uint8Array(33);
+  out.set(mutationPrefix(revision, nowMs), 0);
+  out.set(encodeU64Part(taskId), 24);
+  let stateWire = 0;
+  if (state === "completed") stateWire = 1;
+  if (state === "archived") stateWire = 2;
+  out[32] = stateWire;
+  return out;
+}
+
+// Archive Undo is stricter than an ordinary state change. SQLite validates
+// that the row is still archived and retains its authoritative completion
+// timestamp when restoring a completed task.
+export function encodeTaskUndoArchive(revision: number, nowMs: number, taskId: number, state: TaskState): Bytes {
   const out = new Uint8Array(33);
   out.set(mutationPrefix(revision, nowMs), 0);
   out.set(encodeU64Part(taskId), 24);

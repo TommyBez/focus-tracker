@@ -17,6 +17,7 @@
         .{ .id = "app.toggle-focus", .title = "Start or Pause Focus" },
         .{ .id = "app.quick", .title = "Quick Focus" },
         .{ .id = "app.settings", .title = "Settings" },
+        .{ .id = "app.escape", .title = "Cancel or Close" },
     },
     .shortcuts = .{
         .{ .id = "app.new-task", .key = "n", .modifiers = .{"primary"} },
@@ -25,6 +26,9 @@
         .{ .id = "app.toggle-focus", .key = "space", .modifiers = .{ "primary", "shift" } },
         .{ .id = "app.quick", .key = "f", .modifiers = .{ "primary", "shift" } },
         .{ .id = "app.settings", .key = ",", .modifiers = .{"primary"} },
+        // Escape intentionally stays out of the host shortcut monitor. The
+        // canvas adapter needs the original key event and IME edit payload to
+        // cancel composition before it dispatches a source-aware dismissal.
     },
     .shell = .{
         .windows = .{

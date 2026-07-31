@@ -1,83 +1,129 @@
 <!--
-  A standard model-declared macOS Settings window. Every choice commits
-  immediately through the same authoritative SQLite snapshot as the main
-  window; there is intentionally no Apply, Done, or dismissal row.
+  Preferences commit immediately through the authoritative SQLite snapshot.
+  The fixed-size macOS window keeps the controls dense, grouped, and calm.
 -->
-<column background="background" grow="1" padding="24" gap="14" label="Focus Tracker settings">
-  <row gap="20" cross="center">
-    <column gap="3" grow="1">
-      <text><span weight="medium">Completion sound</span></text>
-      <text size="sm" foreground="text_muted">Chime when a focus block ends</text>
+<column background="background" grow="1" padding="16" gap="10" label="Focus Tracker settings">
+  <row grow="1" gap="12" cross="stretch">
+    <column
+      grow="1"
+      background="surface_subtle"
+      radius="lg"
+      padding="14"
+      gap="8"
+      label="Session rhythm settings"
+    >
+      <column gap="2">
+        <text><span weight="medium">Session rhythm</span></text>
+        <text size="sm" foreground="text_muted">Defaults for every protected block.</text>
+      </column>
+
+      <separator />
+
+      <row gap="12" cross="center">
+        <column grow="1" gap="1">
+          <text><span weight="medium">Focus block</span></text>
+          <text size="sm" foreground="text_muted">Default work interval</text>
+        </column>
+        <toggle-group label="Default focus block length" gap="2">
+          <toggle-button size="sm" selected="{settingsFocusMinutes == 25}" autofocus="{settingsFocusMinutes == 25}" disabled="{saving or hasWriteError}" on-toggle="set_duration_25">25 min</toggle-button>
+          <toggle-button size="sm" selected="{settingsFocusMinutes == 50}" autofocus="{settingsFocusMinutes == 50}" disabled="{saving or hasWriteError}" on-toggle="set_duration_50">50 min</toggle-button>
+          <toggle-button size="sm" selected="{settingsFocusMinutes == 90}" autofocus="{settingsFocusMinutes == 90}" disabled="{saving or hasWriteError}" on-toggle="set_duration_90">90 min</toggle-button>
+        </toggle-group>
+      </row>
+
+      <separator />
+
+      <row gap="12" cross="center">
+        <column grow="1" gap="1">
+          <text><span weight="medium">Short break</span></text>
+          <text size="sm" foreground="text_muted">After each focus block</text>
+        </column>
+        <toggle-group label="Short break length" gap="2">
+          <toggle-button size="sm" selected="{shortBreakMinutes == 5}" disabled="{saving or hasWriteError}" on-toggle="set_short_break_5">5 min</toggle-button>
+          <toggle-button size="sm" selected="{shortBreakMinutes == 10}" disabled="{saving or hasWriteError}" on-toggle="set_short_break_10">10 min</toggle-button>
+          <toggle-button size="sm" selected="{shortBreakMinutes == 15}" disabled="{saving or hasWriteError}" on-toggle="set_short_break_15">15 min</toggle-button>
+        </toggle-group>
+      </row>
+
+      <separator />
+
+      <row gap="12" cross="center">
+        <column grow="1" gap="1">
+          <text><span weight="medium">Long break</span></text>
+          <text size="sm" foreground="text_muted">After every fourth block</text>
+        </column>
+        <toggle-group label="Long break length" gap="2">
+          <toggle-button size="sm" selected="{longBreakMinutes == 15}" disabled="{saving or hasWriteError}" on-toggle="set_long_break_15">15 min</toggle-button>
+          <toggle-button size="sm" selected="{longBreakMinutes == 20}" disabled="{saving or hasWriteError}" on-toggle="set_long_break_20">20 min</toggle-button>
+          <toggle-button size="sm" selected="{longBreakMinutes == 30}" disabled="{saving or hasWriteError}" on-toggle="set_long_break_30">30 min</toggle-button>
+        </toggle-group>
+      </row>
     </column>
-    <switch
-      checked="{soundEnabled}"
-      disabled="{saving}"
-      label="Play completion sound"
-      on-toggle="toggle_sound"
-    />
-  </row>
 
-  <separator />
+    <column
+      width="220"
+      background="surface_subtle"
+      radius="lg"
+      padding="14"
+      gap="8"
+      label="Daily signal settings"
+    >
+      <column gap="2">
+        <text><span weight="medium">Daily signals</span></text>
+        <text size="sm" foreground="text_muted">Context, never a score.</text>
+      </column>
 
-  <row gap="20" cross="center">
-    <column gap="3" grow="1">
-      <text><span weight="medium">Short break</span></text>
-      <text size="sm" foreground="text_muted">Offered after a focus block</text>
+      <separator />
+
+      <column gap="6">
+        <column gap="1">
+          <text><span weight="medium">Focus goal</span></text>
+          <text size="sm" foreground="text_muted">A quiet daily reference</text>
+        </column>
+        <toggle-group label="Daily focus goal" gap="2">
+          <toggle-button size="sm" selected="{dailyGoalMinutes == 60}" disabled="{saving or hasWriteError}" on-toggle="set_daily_goal_60">1 h</toggle-button>
+          <toggle-button size="sm" selected="{dailyGoalMinutes == 120}" disabled="{saving or hasWriteError}" on-toggle="set_daily_goal_120">2 h</toggle-button>
+          <toggle-button size="sm" selected="{dailyGoalMinutes == 180}" disabled="{saving or hasWriteError}" on-toggle="set_daily_goal_180">3 h</toggle-button>
+        </toggle-group>
+      </column>
+
+      <separator />
+
+      <row gap="10" cross="center">
+        <column grow="1" gap="1">
+          <text><span weight="medium">Completion sound</span></text>
+          <text size="sm" foreground="text_muted">Chime when time ends</text>
+        </column>
+        <switch
+          key="{soundSwitchKey}"
+          checked="{soundEnabled}"
+          disabled="{saving or hasWriteError}"
+          label="Play completion sound"
+          on-toggle="toggle_sound"
+        />
+      </row>
     </column>
-    <toggle-group label="Short break length" gap="2">
-      <toggle-button size="sm" selected="{shortBreakMinutes == 5}" disabled="{saving}" on-toggle="set_short_break_5">5 min</toggle-button>
-      <toggle-button size="sm" selected="{shortBreakMinutes == 10}" disabled="{saving}" on-toggle="set_short_break_10">10 min</toggle-button>
-      <toggle-button size="sm" selected="{shortBreakMinutes == 15}" disabled="{saving}" on-toggle="set_short_break_15">15 min</toggle-button>
-    </toggle-group>
   </row>
-
-  <separator />
-
-  <row gap="20" cross="center">
-    <column gap="3" grow="1">
-      <text><span weight="medium">Long break</span></text>
-      <text size="sm" foreground="text_muted">Offered after every fourth block</text>
-    </column>
-    <toggle-group label="Long break length" gap="2">
-      <toggle-button size="sm" selected="{longBreakMinutes == 15}" disabled="{saving}" on-toggle="set_long_break_15">15 min</toggle-button>
-      <toggle-button size="sm" selected="{longBreakMinutes == 20}" disabled="{saving}" on-toggle="set_long_break_20">20 min</toggle-button>
-      <toggle-button size="sm" selected="{longBreakMinutes == 30}" disabled="{saving}" on-toggle="set_long_break_30">30 min</toggle-button>
-    </toggle-group>
-  </row>
-
-  <separator />
-
-  <row gap="20" cross="center">
-    <column gap="3" grow="1">
-      <text><span weight="medium">Daily focus goal</span></text>
-      <text size="sm" foreground="text_muted">Context without streaks or scoring</text>
-    </column>
-    <toggle-group label="Daily focus goal" gap="2">
-      <toggle-button size="sm" selected="{dailyGoalMinutes == 60}" disabled="{saving}" on-toggle="set_daily_goal_60">1 h</toggle-button>
-      <toggle-button size="sm" selected="{dailyGoalMinutes == 120}" disabled="{saving}" on-toggle="set_daily_goal_120">2 h</toggle-button>
-      <toggle-button size="sm" selected="{dailyGoalMinutes == 180}" disabled="{saving}" on-toggle="set_daily_goal_180">3 h</toggle-button>
-    </toggle-group>
-  </row>
-
-  <spacer grow="1" />
 
   <if test="{saving}">
-    <row height="32" gap="8" cross="center" label="Saving settings">
+    <row height="28" gap="8" cross="center" label="Saving settings">
       <spinner />
-      <text size="sm" foreground="text_muted">Saving</text>
+      <text size="sm" foreground="text_muted">Saving changes</text>
     </row>
   </if>
   <else>
     <if test="{hasWriteError}">
-      <row height="32" gap="8" cross="center" label="Settings were not saved">
+      <row height="28" gap="8" cross="center" label="Settings were not saved">
         <badge variant="destructive">Not saved</badge>
-        <spacer grow="1" />
+        <text size="sm" foreground="text_muted" grow="1" overflow="ellipsis">{writeErrorText}</text>
+        <button size="sm" variant="ghost" on-press="discard_failed_change">Discard</button>
         <button size="sm" variant="outline" icon="refresh-cw" on-press="retry_save">Retry</button>
       </row>
     </if>
     <else>
-      <row height="32" cross="center" label="Settings saved locally">
-        <text size="sm" foreground="text_muted">Saved locally</text>
+      <row height="28" gap="8" cross="center" label="Settings saved locally">
+        <column width="7" height="7" background="success" radius="sm" />
+        <text size="sm" foreground="text_muted">Saved locally on this Mac</text>
       </row>
     </else>
   </else>

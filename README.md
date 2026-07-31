@@ -154,6 +154,15 @@ zig-out/release/Focus-Tracker-0.1.0-macOS-arm64.dmg
 zig-out/release/Focus-Tracker-0.1.0-macOS-arm64.dmg.sha256
 ```
 
+Current verified candidate (2026-07-31):
+
+```text
+DMG bytes:            7,116,453
+DMG SHA-256:          b85af3c7ae1ecd6997c92386a8a0f79a8a267bc70134ae5a9bc0c6c2c97eb6e1
+Executable SHA-256:   bec1e63b64fb07e835b65a8595de51c27c0c5618b9ba50f3a03de9c176ee8d5f
+Outer app CDHash:     9820dab6a0fa804c77765f8b83dc7c8674c6d56f
+```
+
 The image contains only `Focus Tracker.app` and an `Applications` link in its
 visible root. Its controlled Finder presentation is stored in `.DS_Store`,
 with packaging-only artwork under `packaging/macos`: a 2× Cobalt Ledger
@@ -186,3 +195,20 @@ keeps the menu-bar icon independent of the launch working directory.
 
 Open [PROGRESS.html](./PROGRESS.html) for the auto-refreshing implementation and
 quality-gate dashboard.
+
+The reproducible acceptance method lives in [UX-GATE.md](./UX-GATE.md).
+Screenshots are visual evidence only; UX judgments require completing the
+documented journeys against running applications.
+
+Current status: Focus Tracker's single-product operational journeys pass the
+latest independent runtime re-audit, including the installed-artifact and
+process-restart checks. The final fresh-cache native run completed 11/11 build
+steps and passed 51/51 authored tests (29 app/runtime, 20 SQLite, and 2 theme),
+plus the manifest and three strict markup/model contracts. The exact
+DMG copy was launched and relaunched through macOS LaunchServices, recovered an
+active block, completed the focus/break journey, exposed both entries in the
+Ledger, persisted a Settings change after close/reopen, exited with zero live
+sessions and zero Focus Tracker processes, and retained `integrity_check=ok`.
+The requested comparative UX judgment against Codex Desktop remains
+`NO RESULT` because the available computer-use runner will not operate Codex
+Desktop; no screenshot score or cross-product AAA preference is claimed.

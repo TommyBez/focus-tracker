@@ -9,10 +9,13 @@ readonly REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)"
 readonly PACKAGE_PARENT="$REPO_ROOT/zig-out/package"
 readonly CANONICAL_APP="$PACKAGE_PARENT/focus-tracker.app"
 readonly PLIST_BUDDY="/usr/libexec/PlistBuddy"
+readonly BUNDLE_README_LINE="Local ad-hoc signed Native SDK macOS app bundle; not Developer ID signed or notarized."
 
 TRANSACTION_DIR=""
 TEMP_APP=""
 BACKUP_APP=""
+BUILD_LOCAL_CACHE=""
+BUILD_GLOBAL_CACHE=""
 REPLACEMENT_STARTED=0
 REPLACEMENT_COMMITTED=0
 NEW_APP_PUBLICATION_STARTED=0
@@ -105,7 +108,7 @@ if [[ $# -gt 0 ]]; then
   esac
 fi
 
-for tool in native codesign find awk grep file; do
+for tool in native codesign find awk grep sed file; do
   require_command "$tool"
 done
 [[ -x "$PLIST_BUDDY" ]] || die "required command not found: $PLIST_BUDDY"
@@ -116,6 +119,7 @@ validate_app() {
   local plist="$app/Contents/Info.plist"
   local resources="$app/Contents/Resources"
   local manifest="$resources/package-manifest.zon"
+  local bundle_readme="$resources/README.txt"
   local executable_name
   local executable
   local packaging_leaks
@@ -128,6 +132,9 @@ validate_app() {
   [[ -f "$plist" ]] || die "$phase app is missing Contents/Info.plist"
   [[ -d "$resources" ]] || die "$phase app is missing Contents/Resources"
   [[ -f "$manifest" ]] || die "$phase app is missing package-manifest.zon"
+  [[ -f "$bundle_readme" ]] || die "$phase app is missing Contents/Resources/README.txt"
+  grep -Fqx "$BUNDLE_README_LINE" "$bundle_readme" || \
+    die "$phase app README does not describe its ad-hoc signing state accurately"
 
   executable_name="$($PLIST_BUDDY -c 'Print :CFBundleExecutable' "$plist")"
   executable="$app/Contents/MacOS/$executable_name"
@@ -157,6 +164,24 @@ validate_app() {
   pass "$phase outer app CDHash: $cdhash"
 }
 
+normalize_bundle_readme() {
+  local app="$1"
+  local bundle_readme="$app/Contents/Resources/README.txt"
+
+  [[ -f "$bundle_readme" ]] || die "fresh package is missing Contents/Resources/README.txt"
+  grep -Fqx 'Unsigned local Native SDK macOS app bundle.' "$bundle_readme" || \
+    die "fresh package README has unexpected contents; refusing a blind rewrite"
+  sed -i '' \
+    "s/^Unsigned local Native SDK macOS app bundle\.$/$BUNDLE_README_LINE/" \
+    "$bundle_readme"
+  grep -Fqx "$BUNDLE_README_LINE" "$bundle_readme" || \
+    die "failed to normalize the fresh package README"
+
+  # Re-seal the outer resource envelope after changing the SDK-generated
+  # README. The release remains deliberately local ad-hoc, never Developer ID.
+  codesign --force --deep --sign - --timestamp=none "$app"
+}
+
 mkdir -p -- "$PACKAGE_PARENT"
 [[ ! -L "$CANONICAL_APP" ]] || die "refusing to replace a symlink: $CANONICAL_APP"
 [[ ! -e "$CANONICAL_APP" || -d "$CANONICAL_APP" ]] || die "canonical app path is not a directory: $CANONICAL_APP"
@@ -164,16 +189,28 @@ mkdir -p -- "$PACKAGE_PARENT"
 TRANSACTION_DIR="$(mktemp -d "$PACKAGE_PARENT/.focus-tracker-package.XXXXXX")"
 TEMP_APP="$TRANSACTION_DIR/focus-tracker.app"
 BACKUP_APP="$TRANSACTION_DIR/previous-focus-tracker.app"
+BUILD_LOCAL_CACHE="$TRANSACTION_DIR/zig-local-cache"
+BUILD_GLOBAL_CACHE="$TRANSACTION_DIR/zig-global-cache"
+mkdir -p -- "$BUILD_LOCAL_CACHE" "$BUILD_GLOBAL_CACHE"
 
-note "Building ReleaseFast binary"
-native build -Doptimize=ReleaseFast
+note "Building ReleaseFast binary with isolated caches"
+env \
+  ZIG_LOCAL_CACHE_DIR="$BUILD_LOCAL_CACHE" \
+  ZIG_GLOBAL_CACHE_DIR="$BUILD_GLOBAL_CACHE" \
+  native build -Doptimize=ReleaseFast
 
 note "Packaging into a fresh app bundle"
-native package \
+env \
+  ZIG_LOCAL_CACHE_DIR="$BUILD_LOCAL_CACHE" \
+  ZIG_GLOBAL_CACHE_DIR="$BUILD_GLOBAL_CACHE" \
+  native package \
   --target macos \
   --signing adhoc \
   --optimize ReleaseFast \
   --output "$TEMP_APP"
+
+note "Normalizing local signing disclosure and re-sealing the bundle"
+normalize_bundle_readme "$TEMP_APP"
 
 note "Validating fresh package before replacement"
 validate_app "$TEMP_APP" "Temporary"

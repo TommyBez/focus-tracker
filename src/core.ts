@@ -5,7 +5,13 @@ import {
   type TextEditState,
   type TextInputEvent,
 } from "@native-sdk/core/text";
-import { type AudioState, type ChromeButtons, type ChromeInsets, type KeyEvent } from "@native-sdk/core/events";
+import {
+  type AudioState,
+  type ChromeButtons,
+  type ChromeInsets,
+  type ColorScheme,
+  type KeyEvent,
+} from "@native-sdk/core/events";
 import {
   decodeSnapshot,
   encodeLoad,
@@ -14,6 +20,7 @@ import {
   encodeTaskPurge,
   encodeTaskRename,
   encodeTaskState,
+  encodeTaskUndoArchive,
   encodeTimerComplete,
   encodeTimerSession,
   encodeTimerStart,
@@ -32,14 +39,23 @@ export type TaskFilter = "open" | "completed" | "archived";
 export type SessionViewState = "idle" | "running" | "paused" | "complete";
 export type HistoryTone = "primary" | "secondary" | "default";
 export type DialogSurface = "main" | "quick";
+export type FocusRecoveryKind =
+  | "none"
+  | "composer_pending"
+  | "composer"
+  | "task_row"
+  | "task_filter"
+  | "purge_trigger";
 export type PendingKind =
   | "none"
   | "load"
+  | "refresh"
   | "task_create"
   | "task_rename"
   | "task_state"
   | "task_archive"
   | "task_restore"
+  | "task_undo_archive"
   | "task_purge"
   | "settings"
   | "timer_start"
@@ -55,7 +71,8 @@ export interface TaskRow {
   readonly title: Bytes;
   readonly done: boolean;
   readonly archived: boolean;
-  readonly position: number;
+  readonly autofocus: boolean;
+  readonly purgeAutofocus: boolean;
   readonly toggleLabel: Bytes;
   readonly focusLabel: Bytes;
   readonly renameLabel: Bytes;
@@ -64,8 +81,6 @@ export interface TaskRow {
   readonly archiveLabel: Bytes;
   readonly restoreLabel: Bytes;
   readonly purgeLabel: Bytes;
-  readonly meta: Bytes;
-  readonly hasMeta: boolean;
 }
 
 export interface WeekDayRow {
@@ -95,6 +110,9 @@ export interface QuickTaskRow {
 export interface Model {
   readonly chromeLeading: number;
   readonly headerHeight: number;
+  readonly colorScheme: ColorScheme;
+  readonly reduceMotion: boolean;
+  readonly highContrast: boolean;
   readonly section: Section;
   readonly loadState: LoadState;
   readonly fatalErrorText: Bytes;
@@ -109,18 +127,30 @@ export interface Model {
   readonly stats: DbStats;
   readonly taskDraftEditor: TextEditState;
   readonly composerKey: number;
+  readonly startAutofocus: boolean;
+  readonly mainStartFocusEpoch: number;
+  readonly quickStartFocusEpoch: number;
+  readonly transportAutofocus: boolean;
   readonly taskFilter: TaskFilter;
   readonly selectedTaskId: number;
   readonly actionTaskId: number;
+  readonly taskActionsTaskId: number;
   readonly editTaskId: number;
   readonly editDraftEditor: TextEditState;
+  readonly editAutofocus: boolean;
+  readonly editFocusEpoch: number;
   readonly paneFraction: number;
   readonly settingsWindowOpen: boolean;
   readonly quickWindowOpen: boolean;
   readonly purgeDialogOpen: boolean;
+  readonly purgeAutofocus: boolean;
+  readonly purgeFocusEpoch: number;
   readonly purgeTaskId: number;
+  readonly focusRecoveryKind: FocusRecoveryKind;
+  readonly focusRecoveryTaskId: number;
   readonly endDialogOpen: boolean;
   readonly completionDialogOpen: boolean;
+  readonly breakAcknowledgementOpen: boolean;
   readonly dialogSurface: DialogSurface;
   readonly pendingKind: PendingKind;
   readonly pendingTitle: Bytes;
@@ -130,13 +160,15 @@ export interface Model {
   readonly pendingDurationMinutes: number;
   readonly pendingSettings: DbSettings;
   readonly pendingNowMs: number;
+  readonly pendingClockRollback: boolean;
+  readonly pendingNeedsFreshSnapshot: boolean;
   readonly retryPayload: Bytes;
   readonly undoTaskId: number;
   readonly undoTaskTitle: Bytes;
+  readonly undoTaskState: TaskState;
   readonly completionTaskId: number;
   readonly completionSessionId: number;
   readonly nowMs: number;
-  readonly historyLoadingMore: boolean;
 }
 
 export type Msg =
@@ -145,6 +177,8 @@ export type Msg =
   | { readonly kind: "task_draft_edit"; readonly edit: TextInputEvent }
   | { readonly kind: "add_task" }
   | { readonly kind: "select_task"; readonly id: number }
+  | { readonly kind: "toggle_task_actions"; readonly id: number }
+  | { readonly kind: "dismiss_task_actions" }
   | { readonly kind: "toggle_task"; readonly id: number }
   | { readonly kind: "start_focus_task"; readonly id: number }
   | { readonly kind: "begin_rename"; readonly id: number }
@@ -174,7 +208,7 @@ export type Msg =
   | { readonly kind: "complete_task_after_focus" }
   | { readonly kind: "keep_task_open_after_focus" }
   | { readonly kind: "start_break" }
-  | { readonly kind: "dismiss_completion" }
+  | { readonly kind: "dismiss_break_acknowledgement" }
   | { readonly kind: "open_settings" }
   | { readonly kind: "raise_settings"; readonly at: number }
   | { readonly kind: "close_settings" }
@@ -196,10 +230,10 @@ export type Msg =
   | { readonly kind: "set_daily_goal_180" }
   | { readonly kind: "toggle_sound" }
   | { readonly kind: "retry_save" }
+  | { readonly kind: "discard_failed_change" }
   | { readonly kind: "retry_boot" }
   | { readonly kind: "quit_app" }
   | { readonly kind: "pane_resized"; readonly fraction: number }
-  | { readonly kind: "load_more_history" }
   | { readonly kind: "new_task_command" }
   | { readonly kind: "today_command" }
   | { readonly kind: "ledger_command" }
@@ -208,9 +242,18 @@ export type Msg =
   | { readonly kind: "quit_command" }
   | { readonly kind: "show_window" }
   | { readonly kind: "escape_pressed" }
+  | { readonly kind: "escape_main_pressed" }
+  | { readonly kind: "escape_quick_pressed" }
+  | { readonly kind: "escape_settings_pressed" }
+  | { readonly kind: "arm_composer_autofocus"; readonly at: number }
+  | { readonly kind: "arm_start_autofocus"; readonly at: number }
+  | { readonly kind: "arm_transport_autofocus"; readonly at: number }
+  | { readonly kind: "arm_purge_autofocus"; readonly at: number }
+  | { readonly kind: "arm_edit_autofocus"; readonly at: number }
   | { readonly kind: "boot_ready"; readonly at: number }
   | { readonly kind: "intent_now"; readonly at: number }
   | { readonly kind: "reload_now"; readonly at: number }
+  | { readonly kind: "refresh_now"; readonly at: number }
   | { readonly kind: "db_ok"; readonly body: Bytes }
   | { readonly kind: "db_err"; readonly error: Bytes }
   | { readonly kind: "tick"; readonly at: number }
@@ -229,9 +272,16 @@ export type Msg =
       readonly insets: ChromeInsets;
       readonly buttons: ChromeButtons;
       readonly tabsProjected: boolean;
+    }
+  | {
+      readonly kind: "appearance_changed";
+      readonly colorScheme: ColorScheme;
+      readonly reduceMotion: boolean;
+      readonly highContrast: boolean;
     };
 
 export const chromeMsg = "chrome_changed";
+export const appearanceMsg = "appearance_changed";
 
 export const viewUnbound = [
   "revision",
@@ -248,6 +298,11 @@ export const viewUnbound = [
   "dialogSurface",
   "taskDraftEditor",
   "editDraftEditor",
+  "mainStartFocusEpoch",
+  "quickStartFocusEpoch",
+  "editFocusEpoch",
+  "purgeFocusEpoch",
+  "focusRecoveryTaskId",
   "purgeTaskId",
   "pendingKind",
   "pendingTitle",
@@ -257,12 +312,18 @@ export const viewUnbound = [
   "pendingDurationMinutes",
   "pendingSettings",
   "pendingNowMs",
+  "pendingClockRollback",
+  "pendingNeedsFreshSnapshot",
   "retryPayload",
   "undoTaskId",
   "undoTaskTitle",
+  "undoTaskState",
   "completionTaskId",
   "completionSessionId",
   "nowMs",
+  "colorScheme",
+  "reduceMotion",
+  "highContrast",
   "open_settings",
   "raise_settings",
   "close_settings",
@@ -280,21 +341,31 @@ export const viewUnbound = [
   "quit_command",
   "show_window",
   "escape_pressed",
+  "escape_main_pressed",
+  "escape_quick_pressed",
+  "escape_settings_pressed",
+  "arm_composer_autofocus",
+  "arm_start_autofocus",
+  "arm_transport_autofocus",
+  "arm_purge_autofocus",
+  "arm_edit_autofocus",
   "boot_ready",
   "intent_now",
   "reload_now",
+  "refresh_now",
   "db_ok",
   "db_err",
   "tick",
   "focus_due",
   "completion_sound_event",
   "chrome_changed",
+  "appearance_changed",
 ] as const;
 
 const EMPTY = asciiBytes("");
 const TITLE_CAPACITY = 240;
-const DEFAULT_PANE = 0.42;
-const FOCUS_PANE = 0.34;
+const DEFAULT_PANE = 0.27;
+const FOCUS_PANE = 0.24;
 const MAX_SAFE_TIME = 9007199254740991;
 
 function emptyEditor(): TextEditState {
@@ -349,6 +420,9 @@ function baseModel(): Model {
   return {
     chromeLeading: 70,
     headerHeight: 52,
+    colorScheme: "light",
+    reduceMotion: false,
+    highContrast: false,
     section: "today",
     loadState: "loading",
     fatalErrorText: asciiBytes("Preparing your local focus ledger."),
@@ -363,18 +437,30 @@ function baseModel(): Model {
     stats: emptyStats(),
     taskDraftEditor: emptyEditor(),
     composerKey: 1,
+    startAutofocus: true,
+    mainStartFocusEpoch: 1,
+    quickStartFocusEpoch: 1,
+    transportAutofocus: true,
     taskFilter: "open",
     selectedTaskId: -1,
     actionTaskId: -1,
+    taskActionsTaskId: -1,
     editTaskId: -1,
     editDraftEditor: emptyEditor(),
+    editAutofocus: false,
+    editFocusEpoch: 1,
     paneFraction: DEFAULT_PANE,
     settingsWindowOpen: false,
     quickWindowOpen: false,
     purgeDialogOpen: false,
+    purgeAutofocus: false,
+    purgeFocusEpoch: 1,
     purgeTaskId: 0,
+    focusRecoveryKind: "none",
+    focusRecoveryTaskId: -1,
     endDialogOpen: false,
     completionDialogOpen: false,
+    breakAcknowledgementOpen: false,
     dialogSurface: "main",
     pendingKind: "load",
     pendingTitle: EMPTY,
@@ -384,13 +470,15 @@ function baseModel(): Model {
     pendingDurationMinutes: 25,
     pendingSettings: defaultSettings(),
     pendingNowMs: 0,
+    pendingClockRollback: false,
+    pendingNeedsFreshSnapshot: false,
     retryPayload: EMPTY,
     undoTaskId: 0,
     undoTaskTitle: EMPTY,
+    undoTaskState: "open",
     completionTaskId: 0,
     completionSessionId: 0,
     nowMs: 0,
-    historyLoadingMore: false,
   };
 }
 
@@ -446,6 +534,17 @@ function taskById(tasks: readonly DbTask[], id: number): DbTask | null {
   return found === undefined ? null : found;
 }
 
+function taskMatchesUndo(task: DbTask | null, priorState: TaskState): boolean {
+  if (task === null || task.state !== "archived") return false;
+  if (priorState === "open") return task.completedMs === 0;
+  if (priorState === "completed") return task.completedMs > 0;
+  return false;
+}
+
+function includesCompletedSession(sessions: readonly DbSession[], id: number): boolean {
+  return sessions.some((session) => session.id === id && session.state === "completed");
+}
+
 function firstOpenTaskId(tasks: readonly DbTask[]): number {
   const sorted = tasks
     .filter((task) => task.state === "open")
@@ -476,18 +575,28 @@ function durationMs(minutes: number): number {
   return minutes * 60000;
 }
 
-function safeNow(previous: number, incoming: number): number {
-  if (incoming < previous || incoming > MAX_SAFE_TIME) return previous;
-  return incoming;
+function validWallNow(value: number): boolean {
+  return value >= 0 && value <= MAX_SAFE_TIME;
+}
+
+function acceptedWallNow(fallback: number, incoming: number): number {
+  return validWallNow(incoming) ? incoming : fallback;
 }
 
 function authoritativeNow(model: Model, session: DbSession | null, operation: PendingKind): number {
-  let base = safeNow(model.nowMs, model.pendingNowMs);
+  let base = acceptedWallNow(model.nowMs, model.pendingNowMs);
+  // A retry deliberately reuses the original mutation payload. Its encoded
+  // timestamp can therefore be older than display ticks observed while the
+  // error banner was open; that is staleness, not a wall-clock rollback.
+  if (!model.pendingClockRollback && base < model.nowMs) base = model.nowMs;
   if (session === null) return base;
   if (operation === "timer_pause") return base;
   if (operation !== "timer_resume" || session.state !== "running") return base;
   const responseBase = session.endsMs >= session.remainingMs ? session.endsMs - session.remainingMs : 0;
-  base = safeNow(base, responseBase);
+  const acceptedResponseBase = acceptedWallNow(base, responseBase);
+  base = !model.pendingClockRollback && acceptedResponseBase < model.nowMs
+    ? model.nowMs
+    : acceptedResponseBase;
   return base;
 }
 
@@ -504,10 +613,11 @@ function remainingMs(model: Model): number {
 }
 
 function naturalCompletionWriteBlocked(model: Model): boolean {
-  // Keep a failed natural-completion request user-retriable instead of
-  // hammering SQLite every display tick. Errors from every other operation
-  // must not strand an independently running authoritative session.
-  return model.hasWriteError && model.pendingKind === "timer_complete_natural";
+  // A failed write owns the single retry slot until the user retries it. An
+  // expired running session stays authoritative at 00:00; once that retry
+  // commits, db_ok immediately schedules its natural completion against the
+  // new revision. This prevents the deadline from erasing an unrelated retry.
+  return model.hasWriteError;
 }
 
 function roundedUpSeconds(milliseconds: number): number {
@@ -537,6 +647,9 @@ function friendlyWriteError(error: Bytes): Bytes {
   if (exactAscii(error, asciiBytes("invalid_task_state"))) {
     return asciiBytes("Only an archived task can be permanently deleted. The ledger was left unchanged.");
   }
+  if (exactAscii(error, asciiBytes("undo_state_mismatch"))) {
+    return asciiBytes("This archived task changed before Undo could finish. The ledger was left unchanged.");
+  }
   if (exactAscii(error, asciiBytes("invalid_title"))) {
     return asciiBytes("Give this task a short, concrete title and try again.");
   }
@@ -564,7 +677,22 @@ function hasBlockingSurface(model: Model): boolean {
 }
 
 function hasBlockingDialog(model: Model): boolean {
-  return model.purgeDialogOpen || model.endDialogOpen || model.completionDialogOpen;
+  // A completed focus block is already durable in SQLite. Its task choices
+  // are an optional follow-up with "keep open" as the safe default, not a
+  // modal gate. Only destructive/active-session confirmations block input.
+  return model.purgeDialogOpen || model.endDialogOpen;
+}
+
+function keepCompletionTaskOpen(model: Model): Model {
+  return {
+    ...model,
+    completionDialogOpen: false,
+    breakAcknowledgementOpen: false,
+    completionTaskId: 0,
+    completionSessionId: 0,
+    paneFraction: DEFAULT_PANE,
+    composerKey: model.composerKey + 1,
+  };
 }
 
 function intentModel(
@@ -578,6 +706,10 @@ function intentModel(
 ): Model {
   return {
     ...model,
+    transportAutofocus:
+      kind === "timer_start" || kind === "timer_pause" || kind === "timer_resume"
+        ? false
+        : model.transportAutofocus,
     saving: true,
     hasWriteError: false,
     writeErrorText: EMPTY,
@@ -587,6 +719,8 @@ function intentModel(
     pendingTitle: title,
     pendingMode: mode,
     pendingDurationMinutes: durationMinutes,
+    pendingClockRollback: false,
+    pendingNeedsFreshSnapshot: false,
     retryPayload: EMPTY,
   };
 }
@@ -599,6 +733,28 @@ function settingsIntentModel(model: Model, settings: DbSettings): Model {
     writeErrorText: EMPTY,
     pendingKind: "settings",
     pendingSettings: settings,
+    pendingClockRollback: false,
+    pendingNeedsFreshSnapshot: false,
+    retryPayload: EMPTY,
+  };
+}
+
+function withoutFailedWrite(model: Model): Model {
+  return {
+    ...model,
+    saving: false,
+    hasWriteError: false,
+    writeErrorText: EMPTY,
+    pendingKind: "none",
+    pendingTitle: EMPTY,
+    pendingTaskId: 0,
+    pendingTaskState: "open",
+    pendingMode: "focus",
+    pendingDurationMinutes: 0,
+    pendingSettings: model.settings,
+    pendingNowMs: model.nowMs,
+    pendingClockRollback: false,
+    pendingNeedsFreshSnapshot: false,
     retryPayload: EMPTY,
   };
 }
@@ -608,12 +764,82 @@ function eligibleTask(model: Model, id: number): boolean {
   return task !== null && task.state === "open";
 }
 
+function withoutFocusRecovery(model: Model): Model {
+  return {
+    ...model,
+    focusRecoveryKind: "none",
+    focusRecoveryTaskId: -1,
+  };
+}
+
+function withStartFocus(model: Model, surface: DialogSurface): Model {
+  return {
+    ...withoutFocusRecovery(model),
+    startAutofocus: true,
+    mainStartFocusEpoch:
+      surface === "main" ? model.mainStartFocusEpoch + 1 : model.mainStartFocusEpoch,
+    quickStartFocusEpoch:
+      surface === "quick" ? model.quickStartFocusEpoch + 1 : model.quickStartFocusEpoch,
+  };
+}
+
+function withFocusRecovery(model: Model, kind: FocusRecoveryKind, taskId: number): Model {
+  return {
+    ...model,
+    focusRecoveryKind: kind,
+    focusRecoveryTaskId: taskId,
+  };
+}
+
+function withTaskRowOrFilterFocus(model: Model, taskId: number): Model {
+  return taskId > 0
+    ? withFocusRecovery(model, "task_row", taskId)
+    : withFocusRecovery(model, "task_filter", -1);
+}
+
+export function mainStartFocusKey(model: Model): number {
+  return model.mainStartFocusEpoch;
+}
+
+export function quickStartFocusKey(model: Model): number {
+  return model.quickStartFocusEpoch;
+}
+
+export function editFocusKey(model: Model): number {
+  return model.editFocusEpoch;
+}
+
+export function purgeFocusKey(model: Model): number {
+  return model.purgeFocusEpoch;
+}
+
+function shouldAutofocusComposer(model: Model): boolean {
+  return (
+    !model.purgeDialogOpen &&
+    (model.focusRecoveryKind === "composer" ||
+      (!selectedTaskExists(model) && model.focusRecoveryKind === "none"))
+  );
+}
+
+export function mainComposerAutofocus(model: Model): boolean {
+  return !model.quickWindowOpen && shouldAutofocusComposer(model);
+}
+
+export function quickComposerAutofocus(model: Model): boolean {
+  return model.quickWindowOpen && shouldAutofocusComposer(model);
+}
+
 export function taskDraft(model: Model): Bytes {
   return model.taskDraftEditor.text;
 }
 
 export function canAddTask(model: Model): boolean {
-  return model.loadState === "ready" && !model.saving && model.taskDraftEditor.text.trim().length > 0;
+  return (
+    model.loadState === "ready" &&
+    !model.saving &&
+    !model.hasWriteError &&
+    model.taskDraftEditor.text.trim().length > 0
+  );
 }
 
 export function editDraft(model: Model): Bytes {
@@ -621,7 +847,12 @@ export function editDraft(model: Model): Bytes {
 }
 
 export function canCommitRename(model: Model): boolean {
-  return model.editTaskId > 0 && !model.saving && model.editDraftEditor.text.trim().length > 0;
+  return (
+    model.editTaskId > 0 &&
+    !model.saving &&
+    !model.hasWriteError &&
+    model.editDraftEditor.text.trim().length > 0
+  );
 }
 
 export function todayLabel(_model: Model): Bytes {
@@ -658,12 +889,14 @@ export function visibleTasks(model: Model): readonly TaskRow[] {
   const tasks = model.tasks
     .filter((task) => task.state === state)
     .toSorted((a, b) => a.sortOrder - b.sortOrder);
-  return tasks.map((task, index) => ({
+  return tasks.map((task) => ({
     id: task.id,
     title: task.title,
     done: task.state === "completed",
     archived: task.state === "archived",
-    position: index + 1,
+    autofocus: model.focusRecoveryKind === "task_row" && model.focusRecoveryTaskId === task.id,
+    purgeAutofocus:
+      model.focusRecoveryKind === "purge_trigger" && model.focusRecoveryTaskId === task.id,
     toggleLabel:
       task.state === "completed"
         ? concat2(asciiBytes("Reopen "), task.title)
@@ -675,16 +908,19 @@ export function visibleTasks(model: Model): readonly TaskRow[] {
     archiveLabel: concat2(asciiBytes("Archive "), task.title),
     restoreLabel: concat2(asciiBytes("Restore "), task.title),
     purgeLabel: concat2(asciiBytes("Permanently delete "), task.title),
-    meta: task.estimateMinutes > 0 ? asciiBytes(`${task.estimateMinutes} minute estimate`) : EMPTY,
-    hasMeta: task.estimateMinutes > 0,
   }));
 }
 
 export function quickTasks(model: Model): readonly QuickTaskRow[] {
-  return model.tasks
+  const openTasks = model.tasks
     .filter((task) => task.state === "open")
-    .toSorted((a, b) => a.sortOrder - b.sortOrder)
-    .slice(0, 3)
+    .toSorted((a, b) => a.sortOrder - b.sortOrder);
+  const selected = openTasks.find((task) => task.id === model.selectedTaskId);
+  const visible =
+    selected === undefined
+      ? openTasks.slice(0, 3)
+      : [selected, ...openTasks.filter((task) => task.id !== selected.id).slice(0, 2)];
+  return visible
     .map((task) => ({
       id: task.id,
       title: task.title,
@@ -723,6 +959,7 @@ export function quickCanStart(model: Model): boolean {
   return (
     model.loadState === "ready" &&
     !model.saving &&
+    !model.hasWriteError &&
     !hasBlockingDialog(model) &&
     model.activeSession === null &&
     eligibleTask(model, model.selectedTaskId)
@@ -730,19 +967,24 @@ export function quickCanStart(model: Model): boolean {
 }
 
 export function quickControlsDisabled(model: Model): boolean {
-  return model.saving || hasBlockingDialog(model);
+  return model.saving || model.hasWriteError || hasBlockingDialog(model);
 }
 
 export function quickStartLabel(model: Model): Bytes {
   return asciiBytes(`Start ${model.settings.focusMinutes} minutes`);
 }
 
+export function selectedFocusIntervalLabel(model: Model): Bytes {
+  return asciiBytes(`Selected focus interval, ${model.settings.focusMinutes} minutes`);
+}
+
 export function quickStatusLabel(model: Model): Bytes {
+  if (model.breakAcknowledgementOpen) return asciiBytes("Break recorded");
   const state = sessionState(model);
-  if (state === "complete") return asciiBytes("RECORDED");
-  if (state === "paused") return asciiBytes("PAUSED");
-  if (state === "running") return isBreak(model) ? asciiBytes("ON BREAK") : asciiBytes("FOCUSING");
-  return asciiBytes("READY");
+  if (state === "complete") return asciiBytes("Recorded");
+  if (state === "paused") return asciiBytes("Paused");
+  if (state === "running") return isBreak(model) ? asciiBytes("On break") : asciiBytes("Focusing");
+  return asciiBytes("Ready");
 }
 
 export function mainEndDialogOpen(model: Model): boolean {
@@ -751,10 +993,6 @@ export function mainEndDialogOpen(model: Model): boolean {
 
 export function quickEndDialogOpen(model: Model): boolean {
   return model.endDialogOpen && model.dialogSurface === "quick";
-}
-
-export function mainCompletionDialogOpen(model: Model): boolean {
-  return model.completionDialogOpen && model.dialogSurface === "main";
 }
 
 export function quickCompletionDialogOpen(model: Model): boolean {
@@ -771,66 +1009,8 @@ export function taskListLabel(model: Model): Bytes {
   return asciiBytes("Open tasks for Today");
 }
 
-function actionTask(model: Model): DbTask | null {
-  const task = taskById(model.tasks, model.actionTaskId);
-  if (task === null || task.state !== model.taskFilter) return null;
-  return task;
-}
-
-export function hasActionTask(model: Model): boolean {
-  return actionTask(model) !== null;
-}
-
-export function actionTaskTitle(model: Model): Bytes {
-  const task = actionTask(model);
-  return task === null ? EMPTY : task.title;
-}
-
-export function actionTaskIsOpen(model: Model): boolean {
-  const task = actionTask(model);
-  return task !== null && task.state === "open";
-}
-
-export function actionTaskIsCompleted(model: Model): boolean {
-  const task = actionTask(model);
-  return task !== null && task.state === "completed";
-}
-
-export function actionTaskIsArchived(model: Model): boolean {
-  const task = actionTask(model);
-  return task !== null && task.state === "archived";
-}
-
-export function actionRenameLabel(model: Model): Bytes {
-  return concat2(asciiBytes("Rename "), actionTaskTitle(model));
-}
-
-export function actionFocusLabel(model: Model): Bytes {
-  return concat2(asciiBytes("Focus on "), actionTaskTitle(model));
-}
-
-export function actionDoneLabel(model: Model): Bytes {
-  return concat3(asciiBytes("Mark "), actionTaskTitle(model), asciiBytes(" complete"));
-}
-
-export function actionArchiveLabel(model: Model): Bytes {
-  return concat2(asciiBytes("Archive "), actionTaskTitle(model));
-}
-
-export function actionReopenLabel(model: Model): Bytes {
-  return concat2(asciiBytes("Reopen "), actionTaskTitle(model));
-}
-
-export function actionRestoreLabel(model: Model): Bytes {
-  return concat2(asciiBytes("Restore "), actionTaskTitle(model));
-}
-
-export function actionPurgeLabel(model: Model): Bytes {
-  return concat2(asciiBytes("Permanently delete "), actionTaskTitle(model));
-}
-
 export function hasUndo(model: Model): boolean {
-  return model.undoTaskId > 0;
+  return model.undoTaskId > 0 && taskMatchesUndo(taskById(model.tasks, model.undoTaskId), model.undoTaskState);
 }
 
 export function purgeTaskTitle(model: Model): Bytes {
@@ -871,6 +1051,10 @@ export function focusLengthMinutes(model: Model): number {
   return model.settings.focusMinutes;
 }
 
+export function settingsFocusMinutes(model: Model): number {
+  return model.settings.focusMinutes;
+}
+
 export function shortBreakMinutes(model: Model): number {
   return model.settings.shortBreakMinutes;
 }
@@ -879,12 +1063,32 @@ export function longBreakMinutes(model: Model): number {
   return model.settings.longBreakMinutes;
 }
 
+function nextBreakIsLong(model: Model): boolean {
+  return model.stats.todayCompletedSessions > 0 && model.stats.todayCompletedSessions % 4 === 0;
+}
+
+export function nextBreakMinutes(model: Model): number {
+  return nextBreakIsLong(model) ? model.settings.longBreakMinutes : model.settings.shortBreakMinutes;
+}
+
 export function dailyGoalMinutes(model: Model): number {
   return model.settings.dailyGoalMinutes;
 }
 
 export function soundEnabled(model: Model): boolean {
   return model.settings.soundEnabled;
+}
+
+// A switch retains the pointer-applied value until its identity changes. Rekey
+// it when the persisted setting flips so the model remains the sole source of
+// truth immediately after the click, not only after reopening Settings.
+export function soundSwitchKey(model: Model): number {
+  const persisted = model.settings.soundEnabled ? 1 : 0;
+  // Native switches retain their pointer-applied value. A failed sound write
+  // must therefore get a new identity so checked= reasserts SQLite/model truth
+  // before Retry or Discard; otherwise the control can visually lie.
+  if (model.hasWriteError && model.pendingKind === "settings") return persisted + 2;
+  return persisted;
 }
 
 export function focusProgress(model: Model): number {
@@ -922,12 +1126,6 @@ export function timerA11y(model: Model): Bytes {
   return asciiBytes(`${minutes} minutes and ${seconds} seconds remaining`);
 }
 
-export function endsAtText(model: Model): Bytes {
-  if (model.activeSession === null) return EMPTY;
-  if (model.activeSession.state === "paused") return asciiBytes("Deadline paused · remaining time is preserved");
-  return asciiBytes("Deadline armed · protected across sleep and window close");
-}
-
 export function completionSummary(model: Model): Bytes {
   if (model.recentSessions.length === 0) return asciiBytes("Your focused time is safely recorded.");
   const exact = model.recentSessions.find((session) => session.id === model.completionSessionId);
@@ -941,6 +1139,13 @@ export function quickCompletionSummary(model: Model): Bytes {
   const exact = model.recentSessions.find((session) => session.id === model.completionSessionId);
   const session = exact === undefined ? model.recentSessions[0] : exact;
   return concat2(focusedDurationPhrase(session.focusedMs), asciiBytes(" recorded."));
+}
+
+export function breakCompletionSummary(model: Model): Bytes {
+  if (model.recentSessions.length === 0) return asciiBytes("Your break is safely recorded.");
+  const exact = model.recentSessions.find((session) => session.id === model.completionSessionId);
+  if (exact === undefined || exact.mode === "focus") return asciiBytes("Your break is safely recorded.");
+  return concat2(restDurationPhrase(exact.focusedMs), asciiBytes(" recorded."));
 }
 
 export function weekMinutes(model: Model): readonly number[] {
@@ -1006,8 +1211,26 @@ export function weekDays(model: Model): readonly WeekDayRow[] {
   });
 }
 
+export function weekDayLabels(model: Model): readonly Bytes[] {
+  return weekDays(model).map((day) => day.label);
+}
+
 export function hasWeekFocus(model: Model): boolean {
   return model.stats.weekFocusMs.some((day) => day.milliseconds > 0);
+}
+
+export function hasFullWeekMinute(model: Model): boolean {
+  const total = model.stats.weekFocusMs.reduce((sum, day) => sum + day.milliseconds, 0);
+  return total >= 60000;
+}
+
+export function weekChartMaxMinutes(model: Model): number {
+  let maximum = model.settings.dailyGoalMinutes;
+  for (const day of model.stats.weekFocusMs) {
+    const minutes = day.milliseconds > 0 && day.milliseconds < 60000 ? 1 : intDiv(day.milliseconds, 60000);
+    if (minutes > maximum) maximum = minutes;
+  }
+  return maximum;
 }
 
 export function focusedWeekText(model: Model): Bytes {
@@ -1023,16 +1246,23 @@ export function todayGoalText(model: Model): Bytes {
   return asciiBytes(`${intDiv(model.stats.todayFocusMs, 60000)} of ${model.settings.dailyGoalMinutes} min today`);
 }
 
-function weekSessionCount(model: Model): number {
-  const oldest = model.nowMs > 604800000 ? model.nowMs - 604800000 : 0;
-  return model.recentSessions.filter(
-    (session) => session.state === "completed" && session.mode === "focus" && session.endedMs >= oldest,
-  ).length;
+export function todayGoalProgress(model: Model): number {
+  const goalMs = model.settings.dailyGoalMinutes * 60000;
+  if (goalMs <= 0) return 0.0;
+  if (model.stats.todayFocusMs >= goalMs) return 1.0;
+  const permille = intDiv(model.stats.todayFocusMs * 1000, goalMs);
+  let fraction = 0.0;
+  let remaining = permille;
+  while (remaining > 0) {
+    remaining -= 1;
+    fraction += 0.001;
+  }
+  return fraction;
 }
 
 export function weekSessionText(model: Model): Bytes {
-  const count = weekSessionCount(model);
-  return count === 1 ? asciiBytes("1 recent session") : asciiBytes(`${count} recent sessions`);
+  const count = historySessions(model).length;
+  return count === 1 ? asciiBytes("1 recent block") : asciiBytes(`${count} recent blocks`);
 }
 
 function focusedDurationPhrase(milliseconds: number): Bytes {
@@ -1075,6 +1305,10 @@ export function commandMsg(name: string): Msg | null {
   if (name === "app.ledger") return { kind: "ledger_command" };
   if (name === "app.toggle-focus") return { kind: "toggle_focus_command" };
   if (name === "app.settings") return { kind: "open_settings" };
+  if (name === "app.escape") return { kind: "escape_pressed" };
+  if (name === "app.escape-main") return { kind: "escape_main_pressed" };
+  if (name === "app.escape-quick") return { kind: "escape_quick_pressed" };
+  if (name === "app.escape-settings") return { kind: "escape_settings_pressed" };
   if (name === "app.quick") return { kind: "open_quick" };
   if (name === "app.quick-toggle") return { kind: "quick_toggle_command" };
   if (name === "app.quick-end") return { kind: "open_quick_end" };
@@ -1091,56 +1325,137 @@ export function keyMsg(key: KeyEvent): Msg | null {
 }
 
 export function subscriptions(model: Model): Sub<Msg> {
+  if (model.loadState !== "ready") return Sub.none;
   if (model.activeSession === null) return Sub.none;
   if (model.activeSession.state !== "running") return Sub.none;
   return Sub.timer("focus-display", 250, "tick");
 }
 
+function startsAuthoritativeWrite(msg: Msg): boolean {
+  switch (msg.kind) {
+    case "add_task":
+    case "toggle_task":
+    case "start_focus_task":
+    case "commit_rename":
+    case "delete_task":
+    case "restore_task":
+    case "confirm_purge_task":
+    case "undo_delete":
+    case "set_duration_25":
+    case "set_duration_50":
+    case "set_duration_90":
+    case "start_focus":
+    case "pause_focus":
+    case "resume_focus":
+    case "finish_focus_now":
+    case "confirm_end_focus":
+    case "complete_task_after_focus":
+    case "start_break":
+    case "set_short_break_5":
+    case "set_short_break_10":
+    case "set_short_break_15":
+    case "set_long_break_15":
+    case "set_long_break_20":
+    case "set_long_break_30":
+    case "set_daily_goal_60":
+    case "set_daily_goal_120":
+    case "set_daily_goal_180":
+    case "toggle_sound":
+    case "toggle_focus_command":
+    case "quick_toggle_command":
+    case "intent_now":
+      return true;
+    default:
+      return false;
+  }
+}
+
 export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
+  // The model has one authoritative retry slot. Keep it intact until Retry or
+  // a reload resolves the error; navigation, editing, and safe dismissal stay
+  // responsive while subsequent writes are ignored deterministically.
+  if (model.hasWriteError && startsAuthoritativeWrite(msg)) return model;
+
   switch (msg.kind) {
     case "show_today":
-      return { ...model, section: "today" };
+      return { ...model, section: "today", taskActionsTaskId: -1 };
     case "show_ledger":
-      return { ...model, section: "ledger" };
+      return { ...model, section: "ledger", taskActionsTaskId: -1 };
     case "task_draft_edit":
-      return { ...model, taskDraftEditor: editApplied(model.taskDraftEditor, msg.edit) };
+      return {
+        ...withoutFocusRecovery(model),
+        taskDraftEditor: editApplied(model.taskDraftEditor, msg.edit),
+      };
     case "add_task": {
       if (model.saving || hasBlockingDialog(model) || model.loadState !== "ready") return model;
       const title = model.taskDraftEditor.text.trim();
       if (title.length === 0) return model;
-      return [intentModel(model, "task_create", 0, "open", title, "focus", model.settings.focusMinutes), Cmd.now("intent_now")];
+      return [
+        intentModel({ ...model, startAutofocus: false }, "task_create", 0, "open", title, "focus", model.settings.focusMinutes),
+        Cmd.now("intent_now"),
+      ];
     }
     case "select_task": {
       const task = taskById(model.tasks, msg.id);
       if (task === null || task.state !== model.taskFilter) return model;
-      return {
-        ...model,
+      const selected: Model = {
+        ...withoutFocusRecovery(model),
         actionTaskId: msg.id,
+        taskActionsTaskId: -1,
         selectedTaskId: task.state === "open" ? msg.id : -1,
       };
+      if (task.state !== "open") return selected;
+      return withStartFocus(selected, "main");
     }
+    case "toggle_task_actions": {
+      const task = taskById(model.tasks, msg.id);
+      if (
+        model.saving ||
+        model.hasWriteError ||
+        task === null ||
+        task.state !== model.taskFilter ||
+        task.state === "archived" ||
+        sessionState(model) !== "idle"
+      ) return model;
+      return {
+        ...model,
+        actionTaskId: task.id,
+        taskActionsTaskId: model.taskActionsTaskId === task.id ? -1 : task.id,
+      };
+    }
+    case "dismiss_task_actions":
+      return { ...model, taskActionsTaskId: -1 };
     case "select_quick_task": {
       if (model.saving || hasBlockingDialog(model) || model.activeSession !== null) return model;
       const task = taskById(model.tasks, msg.id);
       if (task === null || task.state !== "open") return model;
-      return {
-        ...model,
+      return withStartFocus({
+        ...withoutFocusRecovery(model),
         section: "today",
         taskFilter: "open",
         selectedTaskId: task.id,
         actionTaskId: task.id,
-      };
+      }, "quick");
     }
     case "toggle_task": {
       if (model.saving) return model;
       const task = taskById(model.tasks, msg.id);
       if (task === null || task.state === "archived") return model;
       const nextState: TaskState = task.state === "completed" ? "open" : "completed";
-      return [intentModel(model, "task_state", task.id, nextState, EMPTY, "focus", 0), Cmd.now("intent_now")];
+      return [
+        intentModel(withoutFocusRecovery(model), "task_state", task.id, nextState, EMPTY, "focus", 0),
+        Cmd.now("intent_now"),
+      ];
     }
     case "start_focus_task": {
       if (model.saving || hasBlockingDialog(model) || model.activeSession !== null || !eligibleTask(model, msg.id)) return model;
-      const selected: Model = { ...model, selectedTaskId: msg.id, actionTaskId: msg.id, taskFilter: "open" };
+      const selected: Model = {
+        ...model,
+        selectedTaskId: msg.id,
+        actionTaskId: msg.id,
+        taskActionsTaskId: -1,
+        taskFilter: "open",
+      };
       return [
         intentModel(selected, "timer_start", msg.id, "open", EMPTY, "focus", model.settings.focusMinutes),
         Cmd.now("intent_now"),
@@ -1149,7 +1464,16 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
     case "begin_rename": {
       const task = taskById(model.tasks, msg.id);
       if (model.saving || task === null || task.state === "archived") return model;
-      return { ...model, editTaskId: task.id, editDraftEditor: editorFor(task.title) };
+      return [
+        {
+          ...withoutFocusRecovery(model),
+          taskActionsTaskId: -1,
+          editTaskId: task.id,
+          editDraftEditor: editorFor(task.title),
+          editAutofocus: false,
+        },
+        Cmd.delay("edit-autofocus", 1, "arm_edit_autofocus"),
+      ];
     }
     case "edit_draft_edit":
       return { ...model, editDraftEditor: editApplied(model.editDraftEditor, msg.edit) };
@@ -1157,43 +1481,73 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       if (model.saving || model.editTaskId < 1) return model;
       const title = model.editDraftEditor.text.trim();
       if (title.length === 0) return model;
-      return [intentModel(model, "task_rename", model.editTaskId, "open", title, "focus", 0), Cmd.now("intent_now")];
+      return [
+        intentModel(
+          { ...withoutFocusRecovery(model), editAutofocus: false },
+          "task_rename",
+          model.editTaskId,
+          "open",
+          title,
+          "focus",
+          0,
+        ),
+        Cmd.now("intent_now"),
+      ];
     }
-    case "cancel_rename":
-      return { ...model, editTaskId: -1, editDraftEditor: emptyEditor() };
+    case "cancel_rename": {
+      const taskId = model.editTaskId;
+      return withTaskRowOrFilterFocus(
+        { ...model, editTaskId: -1, editDraftEditor: emptyEditor(), editAutofocus: false },
+        taskId,
+      );
+    }
     case "delete_task": {
       if (model.saving) return model;
       const task = taskById(model.tasks, msg.id);
       if (task === null || task.state === "archived") return model;
-      return [intentModel(model, "task_archive", task.id, "archived", task.title, "focus", 0), Cmd.now("intent_now")];
+      return [
+        intentModel(
+          { ...withoutFocusRecovery(model), taskActionsTaskId: -1 },
+          "task_archive",
+          task.id,
+          "archived",
+          task.title,
+          "focus",
+          0,
+        ),
+        Cmd.now("intent_now"),
+      ];
     }
     case "show_open_tasks":
       return {
-        ...model,
+        ...withoutFocusRecovery(model),
         taskFilter: "open",
         selectedTaskId: normalizedSelectedTaskId(model.tasks, model.selectedTaskId),
         actionTaskId: normalizedActionTaskId(model.tasks, "open", model.actionTaskId),
+        taskActionsTaskId: -1,
       };
     case "show_completed_tasks":
       return {
-        ...model,
+        ...withoutFocusRecovery(model),
         taskFilter: "completed",
         selectedTaskId: -1,
         actionTaskId: normalizedActionTaskId(model.tasks, "completed", model.actionTaskId),
+        taskActionsTaskId: -1,
       };
     case "show_archived_tasks":
       return {
-        ...model,
+        ...withoutFocusRecovery(model),
         taskFilter: "archived",
         selectedTaskId: -1,
         actionTaskId: normalizedActionTaskId(model.tasks, "archived", model.actionTaskId),
+        taskActionsTaskId: -1,
       };
     case "restore_task": {
       if (model.saving) return model;
       const task = taskById(model.tasks, msg.id);
       if (task === null || task.state !== "archived") return model;
       return [
-        intentModel(model, "task_restore", task.id, "open", task.title, "focus", 0),
+        intentModel(withoutFocusRecovery(model), "task_restore", task.id, "open", task.title, "focus", 0),
         Cmd.now("intent_now"),
       ];
     }
@@ -1201,37 +1555,64 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       if (model.saving || model.activeSession !== null) return model;
       const task = taskById(model.tasks, msg.id);
       if (task === null || task.state !== "archived") return model;
-      return {
-        ...model,
-        purgeDialogOpen: true,
-        purgeTaskId: task.id,
-        settingsWindowOpen: false,
-        quickWindowOpen: false,
-        endDialogOpen: false,
-        completionDialogOpen: false,
-        completionTaskId: 0,
-        completionSessionId: 0,
-      };
+      return [
+        {
+          ...withoutFocusRecovery(model),
+          purgeDialogOpen: true,
+          purgeAutofocus: true,
+          purgeFocusEpoch: model.purgeFocusEpoch + 1,
+          purgeTaskId: task.id,
+          actionTaskId: task.id,
+          settingsWindowOpen: false,
+          quickWindowOpen: false,
+          endDialogOpen: false,
+          completionDialogOpen: false,
+          completionTaskId: 0,
+          completionSessionId: 0,
+        },
+        Cmd.delay("purge-autofocus", 1, "arm_purge_autofocus"),
+      ];
     }
     case "cancel_purge_task":
-      return { ...model, purgeDialogOpen: false, purgeTaskId: 0 };
+      return withFocusRecovery(
+        { ...model, purgeDialogOpen: false, purgeAutofocus: false, purgeTaskId: 0 },
+        "purge_trigger",
+        model.purgeTaskId,
+      );
     case "confirm_purge_task": {
       if (model.saving || !model.purgeDialogOpen) return model;
       const task = taskById(model.tasks, model.purgeTaskId);
       if (task === null || task.state !== "archived") {
-        return { ...model, purgeDialogOpen: false, purgeTaskId: 0 };
+        return { ...model, purgeDialogOpen: false, purgeAutofocus: false, purgeTaskId: 0 };
       }
-      const confirmed: Model = { ...model, purgeDialogOpen: false, purgeTaskId: 0 };
+      const confirmed: Model = {
+        ...withoutFocusRecovery(model),
+        purgeDialogOpen: false,
+        purgeAutofocus: false,
+        purgeTaskId: 0,
+      };
       return [intentModel(confirmed, "task_purge", task.id, "archived", task.title, "focus", 0), Cmd.now("intent_now")];
     }
-    case "undo_delete":
+    case "undo_delete": {
       if (model.saving || model.undoTaskId === 0) return model;
+      if (!taskMatchesUndo(taskById(model.tasks, model.undoTaskId), model.undoTaskState)) {
+        return { ...model, undoTaskId: 0, undoTaskTitle: EMPTY, undoTaskState: "open" };
+      }
       return [
-        intentModel(model, "task_restore", model.undoTaskId, "open", model.undoTaskTitle, "focus", 0),
+        intentModel(
+          withoutFocusRecovery(model),
+          "task_undo_archive",
+          model.undoTaskId,
+          model.undoTaskState,
+          model.undoTaskTitle,
+          "focus",
+          0,
+        ),
         Cmd.now("intent_now"),
       ];
+    }
     case "dismiss_undo":
-      return { ...model, undoTaskId: 0, undoTaskTitle: EMPTY };
+      return { ...model, undoTaskId: 0, undoTaskTitle: EMPTY, undoTaskState: "open" };
     case "set_duration_25":
       if (model.saving || model.settings.focusMinutes === 25) return model;
       return [
@@ -1287,13 +1668,13 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       ];
     }
     case "request_end_focus":
-      return model.saving || model.activeSession === null
+      return model.saving || model.hasWriteError || model.activeSession === null
         ? model
-        : { ...model, endDialogOpen: true, dialogSurface: "main" };
+        : { ...model, endDialogOpen: true, dialogSurface: "main", transportAutofocus: false };
     case "request_quick_end_focus":
-      return model.saving || model.activeSession === null
+      return model.saving || model.hasWriteError || model.activeSession === null
         ? model
-        : { ...model, endDialogOpen: true, dialogSurface: "quick" };
+        : { ...model, endDialogOpen: true, dialogSurface: "quick", transportAutofocus: false };
     case "finish_focus_now": {
       if (model.saving) return model;
       if (model.activeSession === null) return model;
@@ -1331,46 +1712,33 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       ];
     }
     case "cancel_end_focus":
-      return { ...model, endDialogOpen: false };
+      return [
+        { ...model, endDialogOpen: false, transportAutofocus: false },
+        Cmd.delay("transport-autofocus", 1, "arm_transport_autofocus"),
+      ];
     case "complete_task_after_focus":
       if (model.saving) return model;
-      if (model.completionTaskId === 0) {
-        return {
-          ...model,
-          completionDialogOpen: false,
-          completionSessionId: 0,
-          paneFraction: DEFAULT_PANE,
-          composerKey: model.composerKey + 1,
-        };
+      if (model.completionTaskId === 0 || !eligibleTask(model, model.completionTaskId)) {
+        return keepCompletionTaskOpen(model);
       }
       return [
         intentModel(model, "task_after_focus", model.completionTaskId, "completed", EMPTY, "focus", 0),
         Cmd.now("intent_now"),
       ];
     case "keep_task_open_after_focus":
-      return {
-        ...model,
-        completionDialogOpen: false,
-        completionTaskId: 0,
-        completionSessionId: 0,
-        paneFraction: DEFAULT_PANE,
-        composerKey: model.composerKey + 1,
-      };
+      return keepCompletionTaskOpen(model);
     case "start_break": {
       if (model.saving || model.activeSession !== null) return model;
-      const longBreak = model.stats.todayCompletedSessions > 0 && model.stats.todayCompletedSessions % 4 === 0;
+      const longBreak = nextBreakIsLong(model);
       const mode: SessionMode = longBreak ? "long" : "short";
-      const minutes = longBreak ? model.settings.longBreakMinutes : model.settings.shortBreakMinutes;
+      const minutes = nextBreakMinutes(model);
       return [intentModel(model, "timer_start", 0, "open", EMPTY, mode, minutes), Cmd.now("intent_now")];
     }
-    case "dismiss_completion":
+    case "dismiss_break_acknowledgement":
       return {
         ...model,
-        completionDialogOpen: false,
-        completionTaskId: 0,
+        breakAcknowledgementOpen: false,
         completionSessionId: 0,
-        paneFraction: DEFAULT_PANE,
-        composerKey: model.composerKey + 1,
       };
     case "open_settings":
       if (model.loadState !== "ready" || hasBlockingDialog(model)) return model;
@@ -1394,18 +1762,38 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
     case "close_settings":
       return { ...model, settingsWindowOpen: false };
     case "open_quick":
-      if (model.loadState !== "ready" || hasBlockingDialog(model)) return model;
+      if (model.loadState !== "ready") return model;
+      // A recorded-focus confirmation can move between the main instrument
+      // and Quick Focus. True modal dialogs stay on their current surface.
+      if (hasBlockingDialog(model)) return model;
       if (model.quickWindowOpen) {
+        const raised =
+          sessionState(model) === "idle" && eligibleTask(model, model.selectedTaskId)
+            ? withStartFocus(model, "quick")
+            : model;
         return [
-          { ...model, settingsWindowOpen: false },
+          {
+            ...raised,
+            settingsWindowOpen: false,
+            dialogSurface: model.completionDialogOpen
+              ? "quick"
+              : model.dialogSurface,
+          },
           Cmd.showWindow("quick"),
         ];
       }
+      const opened =
+        sessionState(model) === "idle" && eligibleTask(model, model.selectedTaskId)
+          ? withStartFocus(model, "quick")
+          : model;
       return [
         {
-          ...model,
+          ...opened,
           quickWindowOpen: true,
           settingsWindowOpen: false,
+          dialogSurface: model.completionDialogOpen
+            ? "quick"
+            : model.dialogSurface,
         },
         Cmd.delay("quick-activate", 1, "raise_quick"),
       ];
@@ -1413,14 +1801,26 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       if (!model.quickWindowOpen) return model;
       return [model, Cmd.showWindow("quick")];
     case "close_quick":
-      if (
-        model.dialogSurface === "quick" &&
-        (model.endDialogOpen || model.completionDialogOpen)
-      ) {
+      if (model.dialogSurface === "quick" && model.endDialogOpen) {
         return [
           { ...model, quickWindowOpen: false, dialogSurface: "main" },
           Cmd.showWindow("main"),
         ];
+      }
+      if (model.dialogSurface === "quick" && model.completionDialogOpen) {
+        return {
+          ...keepCompletionTaskOpen(model),
+          quickWindowOpen: false,
+          dialogSurface: "main",
+        };
+      }
+      if (model.breakAcknowledgementOpen) {
+        return {
+          ...model,
+          quickWindowOpen: false,
+          breakAcknowledgementOpen: false,
+          completionSessionId: 0,
+        };
       }
       return { ...model, quickWindowOpen: false };
     case "open_full_app":
@@ -1437,13 +1837,15 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
         Cmd.showWindow("main"),
       ];
     case "open_quick_end":
-      if (model.saving || model.activeSession === null) return model;
+      if (model.saving || model.hasWriteError || model.activeSession === null) return model;
       return [
         {
           ...model,
           quickWindowOpen: true,
+          settingsWindowOpen: false,
           endDialogOpen: true,
           dialogSurface: "quick",
+          transportAutofocus: false,
         },
         Cmd.delay("quick-activate", 1, "raise_quick"),
       ];
@@ -1521,22 +1923,27 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
     case "quit_app":
       return [model, Cmd.quitApp()];
     case "pane_resized": {
-      const low = msg.fraction < 0.30 ? 0.30 : msg.fraction;
-      const high = low > 0.58 ? 0.58 : low;
+      const low = msg.fraction < 0.24 ? 0.24 : msg.fraction;
+      const high = low > 0.48 ? 0.48 : low;
       return { ...model, paneFraction: high };
     }
-    case "load_more_history":
-      return model;
-    case "new_task_command":
+    case "new_task_command": {
       if (hasBlockingSurface(model) || model.loadState !== "ready") return model;
-      return {
-        ...model,
-        section: "today",
-        taskFilter: "open",
-        selectedTaskId: normalizedSelectedTaskId(model.tasks, model.selectedTaskId),
-        actionTaskId: normalizedActionTaskId(model.tasks, "open", model.actionTaskId),
-        composerKey: model.composerKey + 1,
-      };
+      return [
+        withFocusRecovery(
+          {
+            ...(model.completionDialogOpen ? keepCompletionTaskOpen(model) : model),
+            section: "today",
+            taskFilter: "open",
+            selectedTaskId: normalizedSelectedTaskId(model.tasks, model.selectedTaskId),
+            actionTaskId: normalizedActionTaskId(model.tasks, "open", model.actionTaskId),
+          },
+          "composer_pending",
+          -1,
+        ),
+        Cmd.delay("composer-autofocus", 1, "arm_composer_autofocus"),
+      ];
+    }
     case "today_command":
       if (hasBlockingSurface(model)) return model;
       return { ...model, section: "today" };
@@ -1612,72 +2019,218 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       return model;
     }
     case "quit_command":
-      if (hasBlockingSurface(model)) return model;
+      if (hasBlockingDialog(model)) return model;
       return [model, Cmd.quitApp()];
     case "show_window":
       return [model, Cmd.showWindow("main")];
-    case "escape_pressed":
-      if (model.purgeDialogOpen) return { ...model, purgeDialogOpen: false, purgeTaskId: 0 };
-      if (model.endDialogOpen) return { ...model, endDialogOpen: false };
-      if (model.completionDialogOpen) {
+    case "escape_main_pressed":
+      if (model.purgeDialogOpen) {
+        return withFocusRecovery(
+          { ...model, purgeDialogOpen: false, purgeAutofocus: false, purgeTaskId: 0 },
+          "purge_trigger",
+          model.purgeTaskId,
+        );
+      }
+      if (model.endDialogOpen && model.dialogSurface === "main") {
+        return [
+          { ...model, endDialogOpen: false, transportAutofocus: false },
+          Cmd.delay("transport-autofocus", 1, "arm_transport_autofocus"),
+        ];
+      }
+      if (model.completionDialogOpen) return keepCompletionTaskOpen(model);
+      if (model.breakAcknowledgementOpen) {
+        return { ...model, breakAcknowledgementOpen: false, completionSessionId: 0 };
+      }
+      if (model.editTaskId > 0) {
+        return withTaskRowOrFilterFocus(
+          { ...model, editTaskId: -1, editDraftEditor: emptyEditor(), editAutofocus: false },
+          model.editTaskId,
+        );
+      }
+      if (model.taskDraftEditor.text.length > 0) {
         return {
           ...model,
-          completionDialogOpen: false,
-          completionTaskId: 0,
-          completionSessionId: 0,
-          paneFraction: DEFAULT_PANE,
+          taskDraftEditor: emptyEditor(),
           composerKey: model.composerKey + 1,
         };
+      }
+      return model;
+    case "escape_quick_pressed":
+      if (model.endDialogOpen && model.dialogSurface === "quick") {
+        return [
+          { ...model, endDialogOpen: false, transportAutofocus: false },
+          Cmd.delay("transport-autofocus", 1, "arm_transport_autofocus"),
+        ];
+      }
+      if (model.completionDialogOpen) return keepCompletionTaskOpen(model);
+      if (model.breakAcknowledgementOpen) {
+        return { ...model, breakAcknowledgementOpen: false, completionSessionId: 0 };
+      }
+      if (model.quickWindowOpen) return { ...model, quickWindowOpen: false };
+      return model;
+    case "escape_settings_pressed":
+      return model.settingsWindowOpen ? { ...model, settingsWindowOpen: false } : model;
+    case "escape_pressed":
+      // True confirmations can be raised on the main surface even while the
+      // model-declared Settings window remains open; the visible modal owns
+      // Escape before any auxiliary window or non-modal follow-up.
+      if (model.purgeDialogOpen) {
+        return withFocusRecovery(
+          { ...model, purgeDialogOpen: false, purgeAutofocus: false, purgeTaskId: 0 },
+          "purge_trigger",
+          model.purgeTaskId,
+        );
+      }
+      if (model.endDialogOpen) {
+        return [
+          { ...model, endDialogOpen: false, transportAutofocus: false },
+          Cmd.delay("transport-autofocus", 1, "arm_transport_autofocus"),
+        ];
+      }
+      // Settings cannot render completion follow-ups. When there is no true
+      // modal, Escape closes that frontmost surface before touching durable
+      // background completion state.
+      if (model.settingsWindowOpen) return { ...model, settingsWindowOpen: false };
+      // The focus record is already durable. Escape takes the safe default:
+      // leave its task open and return to the ordinary Today workspace.
+      if (model.completionDialogOpen) return keepCompletionTaskOpen(model);
+      if (model.breakAcknowledgementOpen) {
+        return { ...model, breakAcknowledgementOpen: false, completionSessionId: 0 };
       }
       // The SDK key fallback intentionally has no source-window identity.
       // Secondary windows are mutually exclusive, so dismissing the sole
       // auxiliary surface first can never close a sibling in the background.
       if (model.quickWindowOpen) return { ...model, quickWindowOpen: false };
-      if (model.settingsWindowOpen) return { ...model, settingsWindowOpen: false };
-      if (model.editTaskId > 0) return { ...model, editTaskId: -1, editDraftEditor: emptyEditor() };
+      if (model.editTaskId > 0) {
+        return withTaskRowOrFilterFocus(
+          { ...model, editTaskId: -1, editDraftEditor: emptyEditor(), editAutofocus: false },
+          model.editTaskId,
+        );
+      }
       return model;
+    case "arm_composer_autofocus":
+      if (
+        model.loadState !== "ready" ||
+        model.focusRecoveryKind !== "composer_pending" ||
+        hasBlockingDialog(model)
+      ) {
+        return model;
+      }
+      return withFocusRecovery(
+        { ...model, composerKey: model.composerKey + 1 },
+        "composer",
+        -1,
+      );
+    case "arm_start_autofocus":
+      if (model.loadState !== "ready" || sessionState(model) !== "idle" || !eligibleTask(model, model.selectedTaskId)) {
+        return model;
+      }
+      return withStartFocus(model, model.quickWindowOpen ? "quick" : "main");
+    case "arm_transport_autofocus":
+      if (
+        model.loadState !== "ready" ||
+        model.activeSession === null ||
+        (model.activeSession.state !== "running" && model.activeSession.state !== "paused") ||
+        model.endDialogOpen
+      ) {
+        return model;
+      }
+      return { ...model, transportAutofocus: true };
+    case "arm_purge_autofocus":
+      if (model.loadState !== "ready" || !model.purgeDialogOpen) return model;
+      return {
+        ...model,
+        purgeAutofocus: true,
+        purgeFocusEpoch: model.purgeFocusEpoch + 1,
+      };
+    case "arm_edit_autofocus":
+      if (model.loadState !== "ready" || model.editTaskId < 1 || model.purgeDialogOpen || model.endDialogOpen) {
+        return model;
+      }
+      return {
+        ...model,
+        editAutofocus: true,
+        editFocusEpoch: model.editFocusEpoch + 1,
+      };
     case "boot_ready": {
       const payload = encodeLoad(msg.at);
       return [
-        { ...model, pendingKind: "load", pendingNowMs: msg.at, retryPayload: payload },
+        {
+          ...model,
+          pendingKind: "load",
+          pendingNowMs: msg.at,
+          pendingClockRollback: validWallNow(msg.at) && msg.at < model.nowMs,
+          pendingNeedsFreshSnapshot: false,
+          retryPayload: payload,
+        },
         Cmd.request("focus.db.load", payload, { key: "focus-db", ok: "db_ok", err: "db_err" }),
       ];
     }
     case "reload_now": {
-      const at = safeNow(model.nowMs, msg.at);
+      const at = acceptedWallNow(model.nowMs, msg.at);
       const payload = encodeLoad(at);
       return [
         {
           ...model,
           pendingKind: "load",
           pendingNowMs: at,
+          pendingClockRollback: at < model.nowMs,
+          pendingNeedsFreshSnapshot: false,
           retryPayload: payload,
-          saving: false,
+          saving: true,
+        },
+        Cmd.request("focus.db.load", payload, { key: "focus-db", ok: "db_ok", err: "db_err" }),
+      ];
+    }
+    case "refresh_now": {
+      const at = acceptedWallNow(model.nowMs, msg.at);
+      const payload = encodeLoad(at);
+      return [
+        {
+          ...model,
+          pendingKind: "refresh",
+          pendingNowMs: at,
+          pendingClockRollback: at < model.nowMs,
+          pendingNeedsFreshSnapshot: false,
+          retryPayload: payload,
+          saving: true,
         },
         Cmd.request("focus.db.load", payload, { key: "focus-db", ok: "db_ok", err: "db_err" }),
       ];
     }
     case "intent_now": {
-      const at = safeNow(model.nowMs, msg.at);
+      const at = acceptedWallNow(model.nowMs, msg.at);
+      const pending: Model = {
+        ...model,
+        pendingNowMs: at,
+        pendingClockRollback: at < model.nowMs,
+      };
       if (model.pendingKind === "task_create") {
         const payload = encodeTaskCreate(model.revision, at, model.settings.focusMinutes, model.pendingTitle);
         return [
-          { ...model, pendingNowMs: at, retryPayload: payload },
+          { ...pending, retryPayload: payload },
           Cmd.request("focus.db.task.create", payload, { key: "focus-db", ok: "db_ok", err: "db_err" }),
         ];
       }
       if (model.pendingKind === "task_rename") {
         const payload = encodeTaskRename(model.revision, at, model.pendingTaskId, model.pendingTitle);
         return [
-          { ...model, pendingNowMs: at, retryPayload: payload },
+          { ...pending, retryPayload: payload },
           Cmd.request("focus.db.task.rename", payload, { key: "focus-db", ok: "db_ok", err: "db_err" }),
         ];
       }
       if (model.pendingKind === "task_purge") {
         const payload = encodeTaskPurge(model.revision, at, model.pendingTaskId);
         return [
-          { ...model, pendingNowMs: at, retryPayload: payload },
+          { ...pending, retryPayload: payload },
           Cmd.request("focus.db.task.purge", payload, { key: "focus-db", ok: "db_ok", err: "db_err" }),
+        ];
+      }
+      if (model.pendingKind === "task_undo_archive") {
+        const payload = encodeTaskUndoArchive(model.revision, at, model.pendingTaskId, model.pendingTaskState);
+        return [
+          { ...pending, retryPayload: payload },
+          Cmd.request("focus.db.task.undo_archive", payload, { key: "focus-db", ok: "db_ok", err: "db_err" }),
         ];
       }
       if (
@@ -1688,14 +2241,14 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       ) {
         const payload = encodeTaskState(model.revision, at, model.pendingTaskId, model.pendingTaskState);
         return [
-          { ...model, pendingNowMs: at, retryPayload: payload },
+          { ...pending, retryPayload: payload },
           Cmd.request("focus.db.task.set_state", payload, { key: "focus-db", ok: "db_ok", err: "db_err" }),
         ];
       }
       if (model.pendingKind === "settings") {
         const payload = encodeSettings(model.revision, at, model.pendingSettings);
         return [
-          { ...model, pendingNowMs: at, retryPayload: payload },
+          { ...pending, retryPayload: payload },
           Cmd.request("focus.db.settings.set", payload, { key: "focus-db", ok: "db_ok", err: "db_err" }),
         ];
       }
@@ -1708,7 +2261,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
           durationMs(model.pendingDurationMinutes),
         );
         return [
-          { ...model, pendingNowMs: at, retryPayload: payload },
+          { ...pending, retryPayload: payload },
           Cmd.request("focus.db.timer.start", payload, { key: "focus-db", ok: "db_ok", err: "db_err" }),
         ];
       }
@@ -1717,28 +2270,28 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       if (model.pendingKind === "timer_pause") {
         const payload = encodeTimerSession(model.revision, at, sessionId);
         return [
-          { ...model, pendingNowMs: at, retryPayload: payload },
+          { ...pending, retryPayload: payload },
           Cmd.request("focus.db.timer.pause", payload, { key: "focus-db", ok: "db_ok", err: "db_err" }),
         ];
       }
       if (model.pendingKind === "timer_resume") {
         const payload = encodeTimerSession(model.revision, at, sessionId);
         return [
-          { ...model, pendingNowMs: at, retryPayload: payload },
+          { ...pending, retryPayload: payload },
           Cmd.request("focus.db.timer.resume", payload, { key: "focus-db", ok: "db_ok", err: "db_err" }),
         ];
       }
       if (model.pendingKind === "timer_cancel") {
         const payload = encodeTimerSession(model.revision, at, sessionId);
         return [
-          { ...model, pendingNowMs: at, retryPayload: payload },
+          { ...pending, retryPayload: payload },
           Cmd.request("focus.db.timer.cancel", payload, { key: "focus-db", ok: "db_ok", err: "db_err" }),
         ];
       }
       if (model.pendingKind === "timer_complete_manual") {
         const payload = encodeTimerComplete(model.revision, at, sessionId, "manual");
         return [
-          { ...model, pendingNowMs: at, retryPayload: payload },
+          { ...pending, retryPayload: payload },
           Cmd.request("focus.db.timer.complete", payload, { key: "focus-db", ok: "db_ok", err: "db_err" }),
         ];
       }
@@ -1752,22 +2305,58 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
           loadState: "fatal",
           fatalErrorText: decoded.detail,
           saving: false,
+          activeSession: null,
           settingsWindowOpen: false,
           quickWindowOpen: false,
           purgeDialogOpen: false,
+          purgeAutofocus: false,
           purgeTaskId: 0,
           endDialogOpen: false,
           completionDialogOpen: false,
+          breakAcknowledgementOpen: false,
           completionTaskId: 0,
           completionSessionId: 0,
           pendingKind: "none",
         };
       } else {
       const snapshot = decoded.value;
-      const operation = model.pendingKind;
+      let operation: PendingKind = model.pendingKind;
+      let completedDuringRefresh = false;
+      if (operation === "refresh" && snapshot.activeSession === null) {
+        if (model.activeSession !== null) {
+          if (includesCompletedSession(snapshot.recentSessions, model.activeSession.id)) {
+            // A sleep/wake can cross the deadline before the best-effort
+            // refresh following Retry. Preserve normal completion UX instead
+            // of silently collapsing from running to idle.
+            completedDuringRefresh = true;
+            operation = "timer_complete_natural";
+          }
+        }
+      }
+      let completedMode: SessionMode = model.pendingMode;
+      let completedTaskId = model.pendingTaskId;
+      if (completedDuringRefresh) {
+        if (model.activeSession !== null) {
+          completedMode = model.activeSession.mode;
+          completedTaskId = model.activeSession.taskId;
+        }
+      }
+      const wallClockRolledBack = model.pendingClockRollback;
+      const refreshAfterRetry = model.pendingNeedsFreshSnapshot;
+      const loadObservedSameRevision =
+        (model.pendingKind !== "load" && model.pendingKind !== "refresh") ||
+        snapshot.revision === model.revision;
+      const preserveUndo = loadObservedSameRevision && taskMatchesUndo(
+        taskById(snapshot.tasks, model.undoTaskId),
+        model.undoTaskState,
+      );
       let selected =
         model.taskFilter === "open" ? normalizedSelectedTaskId(snapshot.tasks, model.selectedTaskId) : -1;
       let action = normalizedActionTaskId(snapshot.tasks, model.taskFilter, model.actionTaskId);
+      let dialogSessionUnchanged = false;
+      if (model.activeSession !== null && snapshot.activeSession !== null) {
+        dialogSessionUnchanged = model.activeSession.id === snapshot.activeSession.id;
+      }
       if (operation === "task_create") {
         const createdId = snapshot.nextTaskId - 1;
         const created = taskById(snapshot.tasks, createdId);
@@ -1791,10 +2380,25 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
         stats: snapshot.stats,
         selectedTaskId: selected,
         actionTaskId: action,
+        endDialogOpen: model.endDialogOpen && dialogSessionUnchanged,
+        transportAutofocus:
+          model.endDialogOpen && !dialogSessionUnchanged ? true : model.transportAutofocus,
+        undoTaskId: preserveUndo ? model.undoTaskId : 0,
+        undoTaskTitle: preserveUndo ? model.undoTaskTitle : EMPTY,
+        undoTaskState: preserveUndo ? model.undoTaskState : "open",
         pendingKind: "none",
+        pendingClockRollback: false,
+        pendingNeedsFreshSnapshot: false,
         retryPayload: EMPTY,
         nowMs: authoritativeNow(model, snapshot.activeSession, operation),
       };
+      const completionTask = taskById(snapshot.tasks, model.completionTaskId);
+      if (
+        model.completionDialogOpen &&
+        (completionTask === null || completionTask.state !== "open")
+      ) {
+        next = keepCompletionTaskOpen(next);
+      }
       if (operation === "task_create" && bytesEqual(model.taskDraftEditor.text.trim(), model.pendingTitle)) {
         next = {
           ...next,
@@ -1804,39 +2408,66 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
         };
       }
       if (operation === "task_rename" && bytesEqual(model.editDraftEditor.text.trim(), model.pendingTitle)) {
-        next = { ...next, editTaskId: -1, editDraftEditor: emptyEditor() };
+        next = withTaskRowOrFilterFocus(
+          { ...next, editTaskId: -1, editDraftEditor: emptyEditor(), editAutofocus: false },
+          model.pendingTaskId,
+        );
       }
       if (operation === "task_archive") {
+        const archivedTask = taskById(model.tasks, model.pendingTaskId);
+        const priorState: TaskState =
+          archivedTask !== null && archivedTask.state === "completed" ? "completed" : "open";
         next = {
           ...next,
           undoTaskId: model.pendingTaskId,
           undoTaskTitle: model.pendingTitle,
+          undoTaskState: priorState,
           selectedTaskId:
             model.taskFilter === "open" ? normalizedSelectedTaskId(snapshot.tasks, model.pendingTaskId) : -1,
           actionTaskId: firstTaskIdForFilter(snapshot.tasks, model.taskFilter),
         };
+        next = withTaskRowOrFilterFocus(next, next.actionTaskId);
       }
       if (operation === "task_restore") {
-        const restoredVisible = model.taskFilter === "open";
         next = {
           ...next,
+          section: "today",
+          taskFilter: "open",
           undoTaskId: 0,
           undoTaskTitle: EMPTY,
-          selectedTaskId: restoredVisible ? model.pendingTaskId : -1,
-          actionTaskId: restoredVisible
-            ? model.pendingTaskId
-            : firstTaskIdForFilter(snapshot.tasks, model.taskFilter),
+          undoTaskState: "open",
+          selectedTaskId: model.pendingTaskId,
+          actionTaskId: model.pendingTaskId,
         };
+        next = withTaskRowOrFilterFocus(next, model.pendingTaskId);
+      }
+      if (operation === "task_undo_archive") {
+        const restoredFilter: TaskFilter = model.pendingTaskState === "completed" ? "completed" : "open";
+        next = {
+          ...next,
+          section: "today",
+          taskFilter: restoredFilter,
+          undoTaskId: 0,
+          undoTaskTitle: EMPTY,
+          undoTaskState: "open",
+          selectedTaskId: restoredFilter === "open" ? model.pendingTaskId : -1,
+          actionTaskId: model.pendingTaskId,
+        };
+        next = withTaskRowOrFilterFocus(next, model.pendingTaskId);
       }
       if (operation === "task_purge") {
         next = {
           ...next,
           purgeDialogOpen: false,
+          purgeAutofocus: false,
           purgeTaskId: 0,
           undoTaskId: model.undoTaskId === model.pendingTaskId ? 0 : model.undoTaskId,
           undoTaskTitle: model.undoTaskId === model.pendingTaskId ? EMPTY : model.undoTaskTitle,
+          undoTaskState:
+            model.undoTaskId === model.pendingTaskId ? "open" : model.undoTaskState,
           actionTaskId: firstTaskIdForFilter(snapshot.tasks, model.taskFilter),
         };
+        next = withTaskRowOrFilterFocus(next, next.actionTaskId);
       }
       if (operation === "task_state") {
         next = {
@@ -1849,6 +2480,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
               : -1,
           actionTaskId: firstTaskIdForFilter(snapshot.tasks, model.taskFilter),
         };
+        next = withTaskRowOrFilterFocus(next, next.actionTaskId);
       }
       if (operation === "timer_start") {
         next = {
@@ -1858,6 +2490,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
           section: "today",
           paneFraction: FOCUS_PANE,
           completionDialogOpen: false,
+          breakAcknowledgementOpen: false,
           completionTaskId: 0,
           completionSessionId: 0,
         };
@@ -1868,24 +2501,26 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
           paneFraction: DEFAULT_PANE,
           endDialogOpen: false,
           completionDialogOpen: false,
+          breakAcknowledgementOpen: false,
           completionTaskId: 0,
           completionSessionId: 0,
           composerKey: next.composerKey + 1,
         };
       }
       if (operation === "timer_complete_natural" || operation === "timer_complete_manual") {
-        const wasFocus = model.pendingMode === "focus";
+        const wasFocus = completedMode === "focus";
         let completedSessionId = 0;
-        if (wasFocus) {
-          const completed = model.activeSession;
-          if (completed !== null) completedSessionId = completed.id;
-        }
+        const completed = model.activeSession;
+        if (completed !== null) completedSessionId = completed.id;
         next = {
           ...next,
           quickWindowOpen:
             operation === "timer_complete_natural" ? true : next.quickWindowOpen,
+          settingsWindowOpen:
+            operation === "timer_complete_natural" ? false : next.settingsWindowOpen,
           completionDialogOpen: wasFocus,
-          completionTaskId: wasFocus ? model.pendingTaskId : 0,
+          breakAcknowledgementOpen: !wasFocus,
+          completionTaskId: wasFocus ? completedTaskId : 0,
           completionSessionId: completedSessionId,
           dialogSurface:
             operation === "timer_complete_natural" ? "quick" : model.dialogSurface,
@@ -1898,6 +2533,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
         next = {
           ...next,
           completionDialogOpen: false,
+          breakAcknowledgementOpen: false,
           completionTaskId: 0,
           completionSessionId: 0,
           paneFraction: DEFAULT_PANE,
@@ -1906,13 +2542,51 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
           composerKey: next.composerKey + 1,
         };
       }
+      if (
+        wallClockRolledBack &&
+        operation !== "timer_start" &&
+        operation !== "timer_resume" &&
+        next.activeSession !== null &&
+        next.activeSession.state === "running"
+      ) {
+        const live = next.activeSession;
+        const payload = encodeTimerSession(next.revision, next.nowMs, live.id);
+        const pending = intentModel(next, "timer_pause", live.id, "open", EMPTY, live.mode, 0);
+        return [
+          { ...pending, pendingNowMs: next.nowMs, retryPayload: payload },
+          Cmd.request("focus.db.timer.pause", payload, { key: "focus-db", ok: "db_ok", err: "db_err" }),
+        ];
+      }
       if (next.activeSession !== null) {
         if (next.activeSession.state === "running") {
           const sessionId = next.activeSession.id;
           const taskId = next.activeSession.taskId;
           const mode = next.activeSession.mode;
           const delayMs = remainingMs(next);
-          if (delayMs > 0) return [next, Cmd.delay("focus-deadline", delayMs, "focus_due")];
+          if (delayMs > 0) {
+            if (refreshAfterRetry) {
+              // Preserve the mutation's original intent timestamp, then load
+              // once at the actual current wall clock before arming another
+              // deadline. This refreshes Today/week without racing a timer.
+              return [
+                { ...next, saving: true },
+                Cmd.batch<Msg>([
+                  Cmd.cancel("focus-deadline"),
+                  Cmd.now("refresh_now"),
+                ]),
+              ];
+            }
+            if (operation === "timer_start" || operation === "timer_resume") {
+              return [
+                next,
+                Cmd.batch<Msg>([
+                  Cmd.delay("focus-deadline", delayMs, "focus_due"),
+                  Cmd.delay("transport-autofocus", 1, "arm_transport_autofocus"),
+                ]),
+              ];
+            }
+            return [next, Cmd.delay("focus-deadline", delayMs, "focus_due")];
+          }
           const payload = encodeTimerComplete(next.revision, next.nowMs, sessionId, "natural");
           return [
             {
@@ -1929,12 +2603,37 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
         }
       }
       if (operation === "timer_complete_natural") {
-        if (model.pendingMode !== "focus" || !next.settings.soundEnabled) {
+        if (completedMode !== "focus" || !next.settings.soundEnabled) {
+          if (refreshAfterRetry) {
+            return [
+              { ...next, saving: true },
+              Cmd.batch<Msg>([
+                Cmd.cancel("focus-deadline"),
+                Cmd.delay<Msg>("quick-activate", 1, "raise_quick"),
+                Cmd.now("refresh_now"),
+              ]),
+            ];
+          }
           return [
             next,
             Cmd.batch<Msg>([
               Cmd.cancel("focus-deadline"),
               Cmd.delay<Msg>("quick-activate", 1, "raise_quick"),
+            ]),
+          ];
+        }
+        if (refreshAfterRetry) {
+          return [
+            { ...next, saving: true },
+            Cmd.batch([
+              Cmd.cancel("focus-deadline"),
+              Cmd.delay<Msg>("quick-activate", 1, "raise_quick"),
+              Cmd.audioPlay(
+                "completion-sound",
+                { path: asciiBytes("/System/Library/Sounds/Glass.aiff") },
+                { event: "completion_sound_event" },
+              ),
+              Cmd.now("refresh_now"),
             ]),
           ];
         }
@@ -1948,6 +2647,47 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
               { path: asciiBytes("/System/Library/Sounds/Glass.aiff") },
               { event: "completion_sound_event" },
             ),
+          ]),
+        ];
+      }
+      if (operation === "task_create") {
+        next = withStartFocus(next, model.quickWindowOpen ? "quick" : "main");
+        if (refreshAfterRetry) {
+          return [
+            { ...next, saving: true },
+            Cmd.batch<Msg>([
+              Cmd.cancel("focus-deadline"),
+              Cmd.now("refresh_now"),
+            ]),
+          ];
+        }
+        return [next, Cmd.cancel("focus-deadline")];
+      }
+      if (operation === "timer_pause") {
+        if (refreshAfterRetry) {
+          return [
+            { ...next, saving: true },
+            Cmd.batch<Msg>([
+              Cmd.cancel("focus-deadline"),
+              Cmd.delay("transport-autofocus", 1, "arm_transport_autofocus"),
+              Cmd.now("refresh_now"),
+            ]),
+          ];
+        }
+        return [
+          next,
+          Cmd.batch<Msg>([
+            Cmd.cancel("focus-deadline"),
+            Cmd.delay("transport-autofocus", 1, "arm_transport_autofocus"),
+          ]),
+        ];
+      }
+      if (refreshAfterRetry) {
+        return [
+          { ...next, saving: true },
+          Cmd.batch<Msg>([
+            Cmd.cancel("focus-deadline"),
+            Cmd.now("refresh_now"),
           ]),
         ];
       }
@@ -1965,9 +2705,27 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
             saving: false,
             hasWriteError: false,
             pendingKind: "load",
+            undoTaskId: 0,
+            undoTaskTitle: EMPTY,
+            undoTaskState: "open",
           },
           Cmd.now("reload_now"),
         ];
+      }
+      if (model.pendingKind === "refresh") {
+        // The user's mutation already committed. A contended best-effort
+        // stats/timer refresh must never turn that success into a fatal boot
+        // state; the next write, foreground reload, or relaunch refreshes it.
+        return {
+          ...model,
+          saving: false,
+          hasWriteError: false,
+          writeErrorText: EMPTY,
+          pendingKind: "none",
+          pendingClockRollback: false,
+          pendingNeedsFreshSnapshot: false,
+          retryPayload: EMPTY,
+        };
       }
       if (model.pendingKind === "load") {
         return {
@@ -1975,27 +2733,54 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
           loadState: "fatal",
           fatalErrorText: friendlyFatalError(msg.error),
           saving: false,
+          activeSession: null,
           settingsWindowOpen: false,
           quickWindowOpen: false,
           purgeDialogOpen: false,
+          purgeAutofocus: false,
           purgeTaskId: 0,
           endDialogOpen: false,
           completionDialogOpen: false,
+          breakAcknowledgementOpen: false,
           completionTaskId: 0,
           completionSessionId: 0,
           pendingKind: "none",
         };
       }
-      return {
+      const failed: Model = {
         ...model,
         saving: false,
         hasWriteError: true,
         writeErrorText: friendlyWriteError(msg.error),
       };
+      if (model.pendingKind === "timer_pause" || model.pendingKind === "timer_resume") {
+        return [failed, Cmd.delay("transport-autofocus", 1, "arm_transport_autofocus")];
+      }
+      return failed;
     }
     case "retry_save": {
       if (model.saving || model.retryPayload.length === 0) return model;
-      const next: Model = { ...model, saving: true, hasWriteError: false, writeErrorText: EMPTY };
+      const next: Model = {
+        ...model,
+        saving: true,
+        hasWriteError: false,
+        writeErrorText: EMPTY,
+        pendingNeedsFreshSnapshot: true,
+      };
+      // Start and resume did not commit, so retrying their old wall-clock
+      // timestamp would create retroactive focus time. Re-sample now and
+      // rebuild only these payloads from the preserved intent/revision.
+      if (model.pendingKind === "timer_start" || model.pendingKind === "timer_resume") {
+        return [
+          {
+            ...next,
+            pendingClockRollback: false,
+            pendingNeedsFreshSnapshot: false,
+            retryPayload: EMPTY,
+          },
+          Cmd.now("intent_now"),
+        ];
+      }
       if (model.pendingKind === "task_create") {
         return [next, Cmd.request("focus.db.task.create", model.retryPayload, { key: "focus-db", ok: "db_ok", err: "db_err" })];
       }
@@ -2004,6 +2789,9 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       }
       if (model.pendingKind === "task_purge") {
         return [next, Cmd.request("focus.db.task.purge", model.retryPayload, { key: "focus-db", ok: "db_ok", err: "db_err" })];
+      }
+      if (model.pendingKind === "task_undo_archive") {
+        return [next, Cmd.request("focus.db.task.undo_archive", model.retryPayload, { key: "focus-db", ok: "db_ok", err: "db_err" })];
       }
       if (
         model.pendingKind === "task_state" ||
@@ -2016,14 +2804,8 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       if (model.pendingKind === "settings") {
         return [next, Cmd.request("focus.db.settings.set", model.retryPayload, { key: "focus-db", ok: "db_ok", err: "db_err" })];
       }
-      if (model.pendingKind === "timer_start") {
-        return [next, Cmd.request("focus.db.timer.start", model.retryPayload, { key: "focus-db", ok: "db_ok", err: "db_err" })];
-      }
       if (model.pendingKind === "timer_pause") {
         return [next, Cmd.request("focus.db.timer.pause", model.retryPayload, { key: "focus-db", ok: "db_ok", err: "db_err" })];
-      }
-      if (model.pendingKind === "timer_resume") {
-        return [next, Cmd.request("focus.db.timer.resume", model.retryPayload, { key: "focus-db", ok: "db_ok", err: "db_err" })];
       }
       if (model.pendingKind === "timer_cancel") {
         return [next, Cmd.request("focus.db.timer.cancel", model.retryPayload, { key: "focus-db", ok: "db_ok", err: "db_err" })];
@@ -2033,12 +2815,29 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       }
       return { ...model, hasWriteError: false, saving: false };
     }
+    case "discard_failed_change":
+      return model.hasWriteError ? withoutFailedWrite(model) : model;
     case "tick": {
-      const at = safeNow(model.nowMs, msg.at);
+      if (model.saving || !validWallNow(msg.at)) return model;
+      const at = msg.at;
       if (at === model.nowMs) return model;
+      const live = model.activeSession;
+      if (
+        at < model.nowMs &&
+        live !== null &&
+        live.state === "running" &&
+        at < live.endsMs
+      ) {
+        if (model.hasWriteError) return model;
+        const payload = encodeTimerSession(model.revision, at, live.id);
+        const pending = intentModel({ ...model, nowMs: at }, "timer_pause", live.id, "open", EMPTY, live.mode, 0);
+        return [
+          { ...pending, pendingNowMs: at, retryPayload: payload },
+          Cmd.request("focus.db.timer.pause", payload, { key: "focus-db", ok: "db_ok", err: "db_err" }),
+        ];
+      }
       const next: Model = { ...model, nowMs: at };
       if (
-        !model.saving &&
         !naturalCompletionWriteBlocked(model) &&
         next.activeSession !== null &&
         next.activeSession.state === "running" &&
@@ -2068,12 +2867,27 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       if (naturalCompletionWriteBlocked(model)) return model;
       if (model.activeSession === null) return model;
       if (model.activeSession.state !== "running") return model;
-      const sessionId = model.activeSession.id;
-      const taskId = model.activeSession.taskId;
-      const mode = model.activeSession.mode;
-      const endsMs = model.activeSession.endsMs;
-      const observed = safeNow(model.nowMs, msg.at);
-      const at = observed < endsMs ? endsMs : observed;
+      if (!validWallNow(msg.at)) return model;
+      const live = model.activeSession;
+      const sessionId = live.id;
+      const taskId = live.taskId;
+      const mode = live.mode;
+      const endsMs = live.endsMs;
+      const at = msg.at;
+      if (at < model.nowMs && at < endsMs) {
+        const payload = encodeTimerSession(model.revision, at, sessionId);
+        const pending = intentModel({ ...model, nowMs: at }, "timer_pause", sessionId, "open", EMPTY, mode, 0);
+        return [
+          { ...pending, pendingNowMs: at, retryPayload: payload },
+          Cmd.request("focus.db.timer.pause", payload, { key: "focus-db", ok: "db_ok", err: "db_err" }),
+        ];
+      }
+      if (at < endsMs) {
+        const next: Model = { ...model, nowMs: at };
+        const displayed = remainingMs(next);
+        const delayMs = displayed > 0 ? displayed : endsMs - at;
+        return [next, Cmd.delay("focus-deadline", delayMs, "focus_due")];
+      }
       const payload = encodeTimerComplete(model.revision, at, sessionId, "natural");
       return [
         {
@@ -2099,5 +2913,12 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       const height = msg.insets.top > 52 ? msg.insets.top : 52;
       return { ...model, chromeLeading: leading > 12 ? leading : 70, headerHeight: height };
     }
+    case "appearance_changed":
+      return {
+        ...model,
+        colorScheme: msg.colorScheme,
+        reduceMotion: msg.reduceMotion,
+        highContrast: msg.highContrast,
+      };
   }
 }
