@@ -1,0 +1,275 @@
+name: Release desktop
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/desktop/src/**"
+      - "apps/desktop/app.zon"
+      - "apps/desktop/build.zig*"
+      - "apps/desktop/assets/**"
+      - "apps/desktop/packaging/**"
+      - "apps/desktop/scripts/**"
+      - "apps/desktop/package.json"
+      - "apps/desktop/tsconfig.json"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: release-desktop-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and release macOS arm64
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Verify main-branch provenance
+        uses: actions/github-script@v7
+        with:
+          script: |
+            if (context.ref !== "refs/heads/main") {
+              throw new Error(`desktop releases must run from refs/heads/main, found ${context.ref}`);
+            }
+
+            if (context.eventName === "workflow_dispatch") {
+              core.notice(`Manual recovery release authorized for ${context.sha}`);
+              return;
+            }
+
+            const pullRequests = await github.paginate(
+              github.rest.repos.listPullRequestsAssociatedWithCommit,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: context.sha,
+                per_page: 100,
+              },
+            );
+            const mergedToMain = pullRequests.find(
+              (pullRequest) =>
+                pullRequest.merged_at &&
+                pullRequest.base.ref === "main" &&
+                pullRequest.base.repo.full_name.toLowerCase() ===
+                  `${context.repo.owner}/${context.repo.repo}`.toLowerCase(),
+            );
+            if (!mergedToMain) {
+              throw new Error(`push SHA ${context.sha} is not associated with a pull request merged into main`);
+            }
+            core.info(`Release provenance: merged pull request #${mergedToMain.number}`);
+
+      - name: Check out the release SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve version and require an unused tag
+        id: metadata
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("node:fs");
+            const path = require("node:path");
+            const helper = require(path.join(process.env.GITHUB_WORKSPACE, ".github/scripts/product-version.js"));
+            const appPath = path.join(process.env.GITHUB_WORKSPACE, "apps/desktop/app.zon");
+            const buildPath = path.join(process.env.GITHUB_WORKSPACE, "apps/desktop/build.zig.zon");
+            const appVersion = helper.readTopLevelVersion(fs.readFileSync(appPath, "utf8"), "apps/desktop/app.zon");
+            const buildSource = fs.readFileSync(buildPath, "utf8");
+            const buildVersion = helper.readTopLevelVersion(buildSource, "apps/desktop/build.zig.zon");
+            helper.extractNativeSdkHash(buildSource);
+            if (appVersion !== buildVersion) {
+              throw new Error(`desktop versions differ: ${appVersion} vs ${buildVersion}`);
+            }
+
+            const tag = `v${appVersion}`;
+            let tagExists = true;
+            try {
+              await github.rest.git.getRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `tags/${tag}`,
+              });
+            } catch (error) {
+              if (error.status === 404) tagExists = false;
+              else throw error;
+            }
+            if (tagExists) throw new Error(`release tag ${tag} already exists; refusing to clobber it`);
+
+            let releaseExists = true;
+            try {
+              await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag,
+              });
+            } catch (error) {
+              if (error.status === 404) releaseExists = false;
+              else throw error;
+            }
+            if (releaseExists) throw new Error(`release ${tag} already exists; refusing to clobber it`);
+
+            core.setOutput("version", appVersion);
+            core.setOutput("tag", tag);
+            core.info(`Release metadata is ${tag} at ${context.sha}`);
+
+      - name: Test version helper
+        run: node --test .github/scripts/product-version.test.js
+
+      - name: Check desktop
+        run: pnpm --filter @focus-tracker/desktop run check
+
+      - name: Test desktop
+        run: pnpm --filter @focus-tracker/desktop run test
+
+      - name: Package app and fixed-name DMG
+        env:
+          DMG_PATH: ${{ github.workspace }}/apps/desktop/zig-out/release/Focus-Tracker-macOS-arm64.dmg
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "arm64"
+          pnpm --filter @focus-tracker/desktop run package:app
+          mkdir -p "$(dirname "$DMG_PATH")"
+          pnpm --filter @focus-tracker/desktop run package:dmg --output "$DMG_PATH"
+          pnpm --filter @focus-tracker/desktop run verify:dmg "$DMG_PATH"
+
+      - name: Verify packaged architecture and version
+        env:
+          EXPECTED_VERSION: ${{ steps.metadata.outputs.version }}
+          DMG_PATH: ${{ github.workspace }}/apps/desktop/zig-out/release/Focus-Tracker-macOS-arm64.dmg
+        run: |
+          set -euo pipefail
+          APP_PATH="$GITHUB_WORKSPACE/apps/desktop/zig-out/package/focus-tracker.app"
+          PLIST="$APP_PATH/Contents/Info.plist"
+          EXECUTABLE_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$PLIST")"
+          BUNDLE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")"
+          ARCHITECTURES="$(lipo -archs "$APP_PATH/Contents/MacOS/$EXECUTABLE_NAME")"
+          test "$BUNDLE_VERSION" = "$EXPECTED_VERSION"
+          test "$ARCHITECTURES" = "arm64"
+          test -f "$DMG_PATH"
+          test -f "$DMG_PATH.sha256"
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Focus-Tracker-macOS-arm64
+          path: |
+            apps/desktop/zig-out/release/Focus-Tracker-macOS-arm64.dmg
+            apps/desktop/zig-out/release/Focus-Tracker-macOS-arm64.dmg.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Recheck unused tag and release
+        env:
+          TAG: ${{ steps.metadata.outputs.tag }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = process.env.TAG;
+            async function requireNotFound(label, request) {
+              try {
+                await request();
+              } catch (error) {
+                if (error.status === 404) return;
+                throw error;
+              }
+              throw new Error(`${label} already exists; refusing to clobber it`);
+            }
+
+            await requireNotFound(`release tag ${tag}`, () =>
+              github.rest.git.getRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `tags/${tag}`,
+              }),
+            );
+            await requireNotFound(`release ${tag}`, () =>
+              github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag,
+              }),
+            );
+
+      - name: Publish latest Beta release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.metadata.outputs.tag }}
+          DMG_PATH: ${{ github.workspace }}/apps/desktop/zig-out/release/Focus-Tracker-macOS-arm64.dmg
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" \
+            "$DMG_PATH" \
+            "$DMG_PATH.sha256" \
+            --target "$GITHUB_SHA" \
+            --title "Focus Tracker $TAG (Beta)" \
+            --notes "Focus Tracker $TAG Beta for Apple Silicon (arm64). This build is ad-hoc signed and is not notarized." \
+            --generate-notes \
+            --latest
+
+      - name: Verify published release
+        env:
+          TAG: ${{ steps.metadata.outputs.tag }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = process.env.TAG;
+            const release = (
+              await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag,
+              })
+            ).data;
+            if (release.draft || release.prerelease || !release.published_at) {
+              throw new Error(`${tag} is not a normal published release`);
+            }
+            const expectedAssets = [
+              "Focus-Tracker-macOS-arm64.dmg",
+              "Focus-Tracker-macOS-arm64.dmg.sha256",
+            ];
+            const actualAssets = release.assets.map((asset) => asset.name).sort();
+            if (JSON.stringify(actualAssets) !== JSON.stringify(expectedAssets.sort())) {
+              throw new Error(`${tag} assets differ: ${actualAssets.join(", ")}`);
+            }
+
+            const latest = (
+              await github.rest.repos.getLatestRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              })
+            ).data;
+            if (latest.id !== release.id) throw new Error(`${tag} is not the latest release`);
+
+            const tagRef = (
+              await github.rest.git.getRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `tags/${tag}`,
+              })
+            ).data;
+            if (tagRef.object.type !== "commit" || tagRef.object.sha !== context.sha) {
+              throw new Error(`${tag} does not point directly to release SHA ${context.sha}`);
+            }
+            core.notice(`Published and verified ${tag}: ${release.html_url}`);

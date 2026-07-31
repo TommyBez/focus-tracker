@@ -1,11 +1,11 @@
 .{
     .name = .focus_tracker,
     .fingerprint = 0x56d5e5365a707070,
-    .version = "0.1.0",
+    .version = "0.1.1",
     .minimum_zig_version = "0.16.0",
     // Source and authoring toolchain are independently content pinned: Zig
-    // verifies this SDK archive hash; npm ci installs its exact TypeScript
-    // compiler alias from package-lock.json at the checkout root.
+    // verifies this SDK archive hash; pnpm install verifies the workspace
+    // toolchain and TypeScript compiler alias from the root pnpm-lock.yaml.
     .dependencies = .{
         .native_sdk = .{
             .url = "https://github.com/vercel-labs/native/archive/refs/tags/v0.6.2.tar.gz",

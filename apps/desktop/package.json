@@ -1,0 +1,22 @@
+{
+  "name": "@focus-tracker/desktop",
+  "private": true,
+  "description": "Native Focus Tracker desktop application and release tooling.",
+  "scripts": {
+    "dev": "native dev",
+    "build": "native build --yes",
+    "typecheck": "native check --strict",
+    "test": "native test --yes",
+    "check": "native validate app.zon && native test --yes && native check --strict",
+    "package:app": "./scripts/package-app.sh",
+    "package:dmg": "./scripts/build-dmg.sh",
+    "verify:dmg": "./scripts/verify-dmg.sh --expect-background --expect-volume-icon"
+  },
+  "dependencies": {
+    "@native-sdk/core": "0.6.2"
+  },
+  "devDependencies": {
+    "@native-sdk/cli": "0.6.2",
+    "@typescript/old": "npm:typescript@6.0.3"
+  }
+}

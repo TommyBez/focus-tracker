@@ -8,7 +8,8 @@ readonly REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)"
 readonly PLIST_BUDDY="/usr/libexec/PlistBuddy"
 readonly EXPECTED_BACKGROUND_WIDTH=660
 readonly EXPECTED_BACKGROUND_HEIGHT=430
-readonly BUNDLE_README_LINE="Local ad-hoc signed Native SDK macOS app bundle; not Developer ID signed or notarized."
+readonly BUNDLE_README_LINE="Beta build: ad-hoc signed; not Developer ID signed or notarized."
+readonly LAYOUT_TEMPLATE="$REPO_ROOT/packaging/macos/dmg-layout.DS_Store"
 
 SOURCE_APP="$REPO_ROOT/zig-out/package/focus-tracker.app"
 EXPECTED_APP_NAME="Focus Tracker.app"
@@ -128,7 +129,7 @@ done
 
 [[ -n "$DMG_PATH" ]] || die "a DMG path is required"
 
-for tool in hdiutil diskutil plutil codesign lipo shasum awk grep file sips readlink GetFileInfo realpath; do
+for tool in awk cmp codesign diskutil file GetFileInfo grep hdiutil lipo plutil readlink realpath shasum sips; do
   require_command "$tool"
 done
 [[ -x "$PLIST_BUDDY" ]] || die "required command not found: $PLIST_BUDDY"
@@ -166,6 +167,15 @@ fi
 
 SOURCE_APP="$(resolve_existing_path "$SOURCE_APP")"
 [[ -d "$SOURCE_APP" ]] || die "source app is not a directory: $SOURCE_APP"
+SOURCE_BUNDLE_README="$SOURCE_APP/Contents/Resources/README.txt"
+[[ -f "$SOURCE_BUNDLE_README" ]] || die "source app is missing Contents/Resources/README.txt"
+grep -Fqx "$BUNDLE_README_LINE" "$SOURCE_BUNDLE_README" || \
+  die "source app README does not contain the exact beta signing disclosure"
+pass "source app contains the exact beta signing disclosure"
+[[ -f "$LAYOUT_TEMPLATE" && ! -L "$LAYOUT_TEMPLATE" ]] || \
+  die "version-controlled Finder layout template is missing or invalid: $LAYOUT_TEMPLATE"
+file "$LAYOUT_TEMPLATE" | grep -q 'Apple Desktop Services Store' || \
+  die "Finder layout template is not a valid .DS_Store file"
 
 printf '  [check] UDIF structure\n'
 hdiutil verify "$DMG_PATH" >/dev/null
@@ -198,8 +208,8 @@ MOUNTED_APP="$MOUNT_POINT/$EXPECTED_APP_NAME"
 MOUNTED_BUNDLE_README="$MOUNTED_APP/Contents/Resources/README.txt"
 [[ -f "$MOUNTED_BUNDLE_README" ]] || die "mounted app is missing Contents/Resources/README.txt"
 grep -Fqx "$BUNDLE_README_LINE" "$MOUNTED_BUNDLE_README" || \
-  die "mounted app README does not describe its ad-hoc signing state accurately"
-pass "mounted app accurately discloses local ad-hoc signing"
+  die "mounted app README does not contain the exact beta signing disclosure"
+pass "mounted app contains the exact beta signing disclosure"
 [[ -L "$MOUNT_POINT/Applications" ]] || die "mounted image is missing the Applications symlink"
 APPLICATIONS_TARGET="$(readlink "$MOUNT_POINT/Applications")"
 [[ "$APPLICATIONS_TARGET" == "/Applications" ]] || die "Applications symlink targets '$APPLICATIONS_TARGET', expected '/Applications'"
@@ -227,7 +237,9 @@ fi
 pass "hidden root payload is restricted to .background, .DS_Store, and .VolumeIcon.icns"
 
 [[ -f "$MOUNT_POINT/.DS_Store" ]] || die "mounted image is missing Finder .DS_Store layout metadata"
-pass "Finder layout metadata is present"
+cmp -s "$LAYOUT_TEMPLATE" "$MOUNT_POINT/.DS_Store" || \
+  die "mounted Finder layout differs from packaging/macos/dmg-layout.DS_Store"
+pass "Finder layout exactly matches the version-controlled headless template"
 
 if [[ "$EXPECT_BACKGROUND" -eq 1 ]]; then
   MOUNTED_BACKGROUND="$MOUNT_POINT/.background/dmg-background.png"
@@ -309,10 +321,10 @@ codesign --verify --deep --strict --verbose=2 "$MOUNTED_APP"
 SOURCE_SIGNING_INFO="$(codesign -dvvv "$SOURCE_APP" 2>&1)"
 MOUNTED_SIGNING_INFO="$(codesign -dvvv "$MOUNTED_APP" 2>&1)"
 printf '%s\n' "$SOURCE_SIGNING_INFO" | grep -q '^Signature=adhoc$' || \
-  die "source app is not ad-hoc signed despite the local-release disclosure"
+  die "source app is not ad-hoc signed despite the beta disclosure"
 printf '%s\n' "$MOUNTED_SIGNING_INFO" | grep -q '^Signature=adhoc$' || \
-  die "mounted app is not ad-hoc signed despite the local-release disclosure"
-pass "code signature is structurally valid and ad-hoc (local build; not notarized)"
+  die "mounted app is not ad-hoc signed despite the beta disclosure"
+pass "$BUNDLE_README_LINE"
 
 hdiutil detach "$MOUNT_POINT" >/dev/null
 IMAGE_ATTACHED=0

@@ -9,7 +9,7 @@ readonly REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)"
 readonly PACKAGE_PARENT="$REPO_ROOT/zig-out/package"
 readonly CANONICAL_APP="$PACKAGE_PARENT/focus-tracker.app"
 readonly PLIST_BUDDY="/usr/libexec/PlistBuddy"
-readonly BUNDLE_README_LINE="Local ad-hoc signed Native SDK macOS app bundle; not Developer ID signed or notarized."
+readonly BUNDLE_README_LINE="Beta build: ad-hoc signed; not Developer ID signed or notarized."
 
 TRANSACTION_DIR=""
 TEMP_APP=""
@@ -178,7 +178,7 @@ normalize_bundle_readme() {
     die "failed to normalize the fresh package README"
 
   # Re-seal the outer resource envelope after changing the SDK-generated
-  # README. The release remains deliberately local ad-hoc, never Developer ID.
+  # README. This remains the explicitly disclosed beta ad-hoc signature.
   codesign --force --deep --sign - --timestamp=none "$app"
 }
 
@@ -197,7 +197,7 @@ note "Building ReleaseFast binary with isolated caches"
 env \
   ZIG_LOCAL_CACHE_DIR="$BUILD_LOCAL_CACHE" \
   ZIG_GLOBAL_CACHE_DIR="$BUILD_GLOBAL_CACHE" \
-  native build -Doptimize=ReleaseFast
+  native build --yes -Doptimize=ReleaseFast
 
 note "Packaging into a fresh app bundle"
 env \
@@ -229,4 +229,4 @@ REPLACEMENT_COMMITTED=1
 printf '\nApp package ready\n'
 printf '  Bundle: %s\n' "$CANONICAL_APP"
 printf '  Build:  ReleaseFast\n'
-printf '  Signing: local ad-hoc app signature (not Developer ID or notarized)\n'
+printf '  Signing: %s\n' "$BUNDLE_README_LINE"

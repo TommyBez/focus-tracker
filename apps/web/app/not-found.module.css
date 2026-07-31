@@ -1,0 +1,36 @@
+.main {
+  width: min(100% - 32px, 760px);
+  min-height: 100svh;
+  margin: 0 auto;
+  display: grid;
+  align-content: center;
+  gap: 22px;
+}
+
+.main p {
+  margin: 0;
+  color: var(--cobalt-bright);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+}
+
+.main h1 {
+  max-width: 680px;
+  margin: 0;
+  font-family: var(--serif);
+  font-size: clamp(56px, 10vw, 96px);
+  font-weight: 420;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+}
+
+.main a {
+  width: max-content;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 700;
+}

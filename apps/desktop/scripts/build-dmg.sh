@@ -7,20 +7,8 @@ umask 022
 readonly SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)"
 readonly PLIST_BUDDY="/usr/libexec/PlistBuddy"
-readonly BUNDLE_README_LINE="Local ad-hoc signed Native SDK macOS app bundle; not Developer ID signed or notarized."
-
-# Finder's bounds include the title bar. A 458 px outer height leaves roughly
-# 430 px for the icon-view canvas used by the background artwork.
-readonly FINDER_WINDOW_X=140
-readonly FINDER_WINDOW_Y=120
-readonly FINDER_WINDOW_WIDTH=660
-readonly FINDER_WINDOW_HEIGHT=458
-readonly FINDER_ICON_SIZE=112
-readonly FINDER_TEXT_SIZE=13
-readonly APP_ICON_X=170
-readonly APP_ICON_Y=242
-readonly APPLICATIONS_ICON_X=490
-readonly APPLICATIONS_ICON_Y=242
+readonly BUNDLE_README_LINE="Beta build: ad-hoc signed; not Developer ID signed or notarized."
+readonly LAYOUT_TEMPLATE="$REPO_ROOT/packaging/macos/dmg-layout.DS_Store"
 readonly BACKGROUND_WIDTH=660
 readonly BACKGROUND_HEIGHT=430
 
@@ -46,7 +34,7 @@ BACKUP_CHECKSUM=""
 
 usage() {
   cat <<'EOF'
-Build the polished local Focus Tracker installer image.
+Build the polished Focus Tracker beta installer image.
 
 Usage:
   scripts/build-dmg.sh [options]
@@ -58,11 +46,13 @@ Options:
   --no-background         Build without a background image.
   --volume-icon PATH      Optional .icns volume icon.
   --no-volume-icon        Build without a custom volume icon.
-  --volume-name NAME      Mounted volume name (default: Focus Tracker).
+  --volume-name NAME      Must match the layout template: Focus Tracker.
   -h, --help              Show this help.
 
 The default source is zig-out/package/focus-tracker.app. If present,
 packaging/macos/dmg-background.png and packaging/macos/dmg-volume.icns are used automatically.
+The version-controlled packaging/macos/dmg-layout.DS_Store supplies the Finder
+window, icon positions, and background reference without launching Finder.
 The output defaults to zig-out/release/Focus-Tracker-<version>-macOS-<arch>.dmg.
 EOF
 }
@@ -105,6 +95,8 @@ assert_exact_hidden_root_payload() {
   fi
 
   [[ -f "$root/.DS_Store" ]] || die "$phase image is missing .DS_Store"
+  cmp -s "$LAYOUT_TEMPLATE" "$root/.DS_Store" || \
+    die "$phase image .DS_Store differs from the version-controlled layout template"
   if [[ "$INCLUDE_BACKGROUND" -eq 1 ]]; then
     [[ -d "$root/.background" ]] || die "$phase image is missing .background"
   else
@@ -121,7 +113,8 @@ remove_mount_generated_metadata() {
   local root="$1"
   local generated
 
-  [[ "$root" == "/Volumes/$VOLUME_NAME" ]] || die "refusing metadata cleanup outside the expected writable volume: $root"
+  [[ -n "$WORK_DIR" && "$root" == "$WORK_DIR/writable-mount" ]] || \
+    die "refusing metadata cleanup outside the generated writable mount: $root"
   for generated in \
     .fseventsd \
     .Spotlight-V100 \
@@ -252,10 +245,20 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-for tool in ditto hdiutil osascript SetFile GetFileInfo sips lipo shasum awk grep du file codesign realpath find touch; do
+for tool in awk cmp codesign ditto du file find GetFileInfo grep hdiutil lipo realpath SetFile shasum sips stat strings sync touch tr; do
   require_command "$tool"
 done
 [[ -x "$PLIST_BUDDY" ]] || die "required command not found: $PLIST_BUDDY"
+
+[[ -f "$LAYOUT_TEMPLATE" && ! -L "$LAYOUT_TEMPLATE" ]] || \
+  die "version-controlled Finder layout template is missing or invalid: $LAYOUT_TEMPLATE"
+file "$LAYOUT_TEMPLATE" | grep -q 'Apple Desktop Services Store' || \
+  die "Finder layout template is not a valid .DS_Store file"
+LAYOUT_STRINGS="$(strings "$LAYOUT_TEMPLATE")"
+for marker in 'Focus Tracker' '.background' 'dmg-background.png'; do
+  grep -Fqx "$marker" <<< "$LAYOUT_STRINGS" || \
+    die "Finder layout template is missing expected marker: $marker"
+done
 
 APP_SOURCE="$(resolve_existing_path "$APP_SOURCE")"
 [[ -d "$APP_SOURCE" ]] || die "source app is not a directory: $APP_SOURCE"
@@ -309,6 +312,8 @@ OUTPUT_DMG="$OUTPUT_PARENT/$(basename -- "$OUTPUT_DMG")"
 [[ -n "$VOLUME_NAME" ]] || die "volume name cannot be empty"
 [[ "$VOLUME_NAME" != */* ]] || die "volume name cannot contain a slash"
 [[ ${#VOLUME_NAME} -le 27 ]] || die "volume name must be 27 characters or fewer for HFS+ compatibility"
+[[ "$VOLUME_NAME" == "Focus Tracker" ]] || \
+  die "the version-controlled Finder layout template requires volume name 'Focus Tracker'"
 
 INCLUDE_BACKGROUND=0
 if [[ -n "$BACKGROUND_IMAGE" ]]; then
@@ -352,21 +357,20 @@ note "Verifying source application signature"
 codesign --verify --deep --strict --verbose=2 "$APP_SOURCE"
 SOURCE_SIGNING_INFO="$(codesign -dvvv "$APP_SOURCE" 2>&1)"
 printf '%s\n' "$SOURCE_SIGNING_INFO" | grep -q '^Signature=adhoc$' || \
-  die "source app is not ad-hoc signed; this local-release DMG cannot describe it truthfully"
-note "Source app has the required local ad-hoc signature"
+  die "source app is not ad-hoc signed; this beta DMG cannot describe it truthfully"
+note "Source app has the required beta ad-hoc signature"
 
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/focus-tracker-dmg.XXXXXX")"
 OUTPUT_TRANSACTION_DIR="$(mktemp -d "$OUTPUT_PARENT/.focus-tracker-dmg.XXXXXX")"
 STAGE_DIR="$WORK_DIR/stage"
-MOUNT_POINT="/Volumes/$VOLUME_NAME"
+MOUNT_POINT="$WORK_DIR/writable-mount"
 READ_WRITE_DMG="$WORK_DIR/Focus-Tracker-read-write.dmg"
 APP_BUNDLE_NAME="Focus Tracker.app"
 STAGED_APP="$STAGE_DIR/$APP_BUNDLE_NAME"
 TEMP_FINAL_DMG="$OUTPUT_TRANSACTION_DIR/$(basename -- "$OUTPUT_DMG")"
 TEMP_CHECKSUM="$OUTPUT_TRANSACTION_DIR/$(basename -- "$OUTPUT_DMG").sha256"
 
-mkdir -p -- "$STAGE_DIR"
-[[ ! -e "$MOUNT_POINT" && ! -L "$MOUNT_POINT" ]] || die "a volume is already mounted at $MOUNT_POINT; eject it before building"
+mkdir -p -- "$STAGE_DIR" "$MOUNT_POINT"
 
 note "Staging $APP_BUNDLE_NAME with resource forks and extended attributes"
 ditto --rsrc --extattr "$APP_SOURCE" "$STAGED_APP"
@@ -394,20 +398,29 @@ hdiutil create \
   -srcfolder "$STAGE_DIR" \
   "$READ_WRITE_DMG"
 
-note "Mounting image for Finder presentation metadata"
+note "Mounting image headlessly for deterministic presentation metadata"
 hdiutil attach \
   -readwrite \
   -noverify \
   -noautoopen \
+  -nobrowse \
+  -mountpoint "$MOUNT_POINT" \
   "$READ_WRITE_DMG" >/dev/null
 IMAGE_ATTACHED=1
-[[ -d "$MOUNT_POINT" ]] || die "image mounted somewhere other than the expected path: $MOUNT_POINT"
+[[ -d "$MOUNT_POINT" ]] || die "writable image mount is unavailable: $MOUNT_POINT"
 
 # Prevent Spotlight and FSEvents from populating release-only metadata while
-# Finder writes the intended presentation. These sentinels are removed before
-# detach and the subsequent read-only remount proves that none persisted.
+# the image is mounted. These sentinels are removed before detach and the
+# subsequent read-only remount proves that none persisted.
 mkdir -p -- "$MOUNT_POINT/.fseventsd"
 touch "$MOUNT_POINT/.fseventsd/no_log" "$MOUNT_POINT/.metadata_never_index"
+
+note "Installing version-controlled Finder layout without a GUI session"
+ditto --norsrc --noextattr --noqtn --noacl \
+  "$LAYOUT_TEMPLATE" \
+  "$MOUNT_POINT/.DS_Store"
+cmp -s "$LAYOUT_TEMPLATE" "$MOUNT_POINT/.DS_Store" || \
+  die "mounted Finder layout does not match the version-controlled template"
 
 if [[ -d "$MOUNT_POINT/.background" ]]; then
   SetFile -a V "$MOUNT_POINT/.background"
@@ -415,82 +428,12 @@ fi
 if [[ "$INCLUDE_VOLUME_ICON" -eq 1 ]]; then
   # Copy onto the mounted filesystem. hdiutil may treat a pre-staged
   # .VolumeIcon.icns as source-folder metadata instead of payload.
-  ditto --norsrc "$VOLUME_ICON" "$MOUNT_POINT/.VolumeIcon.icns"
+  ditto --norsrc --noextattr --noqtn --noacl "$VOLUME_ICON" "$MOUNT_POINT/.VolumeIcon.icns"
   SetFile -c icnC "$MOUNT_POINT/.VolumeIcon.icns"
   [[ -f "$MOUNT_POINT/.VolumeIcon.icns" ]] || die "custom volume icon was not written to the mounted image"
 fi
-note "Writing Finder layout"
-osascript - \
-  "$VOLUME_NAME" \
-  "$APP_BUNDLE_NAME" \
-  "$INCLUDE_BACKGROUND" \
-  "$FINDER_WINDOW_X" \
-  "$FINDER_WINDOW_Y" \
-  "$FINDER_WINDOW_WIDTH" \
-  "$FINDER_WINDOW_HEIGHT" \
-  "$FINDER_ICON_SIZE" \
-  "$FINDER_TEXT_SIZE" \
-  "$APP_ICON_X" \
-  "$APP_ICON_Y" \
-  "$APPLICATIONS_ICON_X" \
-  "$APPLICATIONS_ICON_Y" <<'APPLESCRIPT'
-on run argv
-  set volumeName to item 1 of argv
-  set appBundleName to item 2 of argv
-  set hasBackground to (item 3 of argv is "1")
-  set windowX to (item 4 of argv) as integer
-  set windowY to (item 5 of argv) as integer
-  set windowWidth to (item 6 of argv) as integer
-  set windowHeight to (item 7 of argv) as integer
-  set desiredIconSize to (item 8 of argv) as integer
-  set desiredTextSize to (item 9 of argv) as integer
-  set appX to (item 10 of argv) as integer
-  set appY to (item 11 of argv) as integer
-  set applicationsX to (item 12 of argv) as integer
-  set applicationsY to (item 13 of argv) as integer
-
-  tell application "Finder"
-    tell disk volumeName
-      open
-      set diskWindow to container window
-      set current view of diskWindow to icon view
-      set toolbar visible of diskWindow to false
-      set statusbar visible of diskWindow to false
-      set pathbar visible of diskWindow to false
-      set sidebar width of diskWindow to 0
-      set bounds of diskWindow to {windowX, windowY, windowX + windowWidth, windowY + windowHeight}
-
-      set viewOptions to icon view options of diskWindow
-      set arrangement of viewOptions to not arranged
-      set icon size of viewOptions to desiredIconSize
-      set text size of viewOptions to desiredTextSize
-      set label position of viewOptions to bottom
-      set shows item info of viewOptions to false
-      set shows icon preview of viewOptions to true
-
-      if hasBackground then
-        set background picture of viewOptions to file ".background:dmg-background.png"
-      end if
-
-      set position of item appBundleName of diskWindow to {appX, appY}
-      set position of item "Applications" of diskWindow to {applicationsX, applicationsY}
-      delay 2
-      close diskWindow
-    end tell
-  end tell
-end run
-APPLESCRIPT
-
-[[ -f "$MOUNT_POINT/.DS_Store" ]] || die "Finder did not write .DS_Store layout metadata"
-if [[ "$INCLUDE_VOLUME_ICON" -eq 1 && ! -f "$MOUNT_POINT/.VolumeIcon.icns" ]]; then
-  printf 'Mounted volume contents after Finder update:\n' >&2
-  ls -laO@ "$MOUNT_POINT" >&2 || true
-  die "Finder removed or renamed .VolumeIcon.icns"
-fi
 if [[ "$INCLUDE_VOLUME_ICON" -eq 1 ]]; then
-  # Finder can discard .VolumeIcon.icns if the volume advertises its custom
-  # icon before Finder has finished writing the window presentation. Apply
-  # these flags only after the cosmetic AppleScript has closed the window.
+  # Apply the HFS FinderInfo flags directly; no Finder process is involved.
   SetFile -a V "$MOUNT_POINT/.VolumeIcon.icns"
   SetFile -a C "$MOUNT_POINT"
   VOLUME_ATTRIBUTES="$(GetFileInfo -a "$MOUNT_POINT")"
@@ -527,7 +470,6 @@ if [[ "$INCLUDE_VOLUME_ICON" -eq 1 ]]; then
 fi
 hdiutil detach "$MOUNT_POINT" >/dev/null
 IMAGE_ATTACHED=0
-MOUNT_POINT="/Volumes/$VOLUME_NAME"
 
 note "Compressing final image as UDZO (zlib level 9)"
 hdiutil convert \
@@ -582,4 +524,4 @@ printf '\nDMG ready\n'
 printf '  Image:  %s\n' "$OUTPUT_DMG"
 printf '  Bytes:  %s\n' "$DMG_SIZE_BYTES"
 printf '  SHA256: %s\n' "$DMG_SHA256"
-printf '  Signing: local ad-hoc app signature (not Developer ID or notarized)\n'
+printf '  Signing: %s\n' "$BUNDLE_README_LINE"

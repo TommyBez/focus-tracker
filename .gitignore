@@ -1,6 +1,10 @@
 # Editor and dependency state
 .DS_Store
 node_modules/
+.turbo/
+.next/
+.vercel/
+*.tsbuildinfo
 
 # Native SDK / Zig build output
 .native/

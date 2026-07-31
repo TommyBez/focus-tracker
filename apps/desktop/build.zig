@@ -121,7 +121,7 @@ fn stageTypeScriptCore(b: *std.Build, sdk: *std.Build.Dependency) StagedInputs {
         @panic("building the TypeScript core requires Node.js on PATH");
     };
     const transpile = b.addSystemCommand(&.{node});
-    // The npm CLI ships the pinned TypeScript compiler next to its SDK
+    // The Native CLI package ships the pinned TypeScript compiler next to its SDK
     // source and exposes that source as NATIVE_SDK_PATH. A Zig package
     // archive intentionally has no node_modules, so use the active CLI's
     // matching authoring toolchain when available while the runtime/build

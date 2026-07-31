@@ -1,0 +1,12 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "build": { "cache": false, "outputs": [] },
+    "typecheck": { "cache": false },
+    "test": { "cache": false },
+    "check": { "cache": false },
+    "package:app": { "cache": false },
+    "package:dmg": { "cache": false },
+    "verify:dmg": { "cache": false }
+  }
+}
