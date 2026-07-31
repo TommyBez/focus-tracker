@@ -10,11 +10,11 @@
       radius="lg"
       padding="14"
       gap="8"
-      label="Session rhythm settings"
+      label="Timer default settings"
     >
       <column gap="2">
-        <text><span weight="medium">Session rhythm</span></text>
-        <text size="sm" foreground="text_muted">Defaults for every protected block.</text>
+        <text><span weight="medium">Timer defaults</span></text>
+        <text size="sm" foreground="text_muted">Default lengths for focus and breaks.</text>
       </column>
 
       <separator />
@@ -66,11 +66,11 @@
       radius="lg"
       padding="14"
       gap="8"
-      label="Daily signal settings"
+      label="Daily settings"
     >
       <column gap="2">
-        <text><span weight="medium">Daily signals</span></text>
-        <text size="sm" foreground="text_muted">Context, never a score.</text>
+        <text><span weight="medium">Daily</span></text>
+        <text size="sm" foreground="text_muted">Goal and notification settings.</text>
       </column>
 
       <separator />
@@ -78,7 +78,7 @@
       <column gap="6">
         <column gap="1">
           <text><span weight="medium">Focus goal</span></text>
-          <text size="sm" foreground="text_muted">A quiet daily reference</text>
+          <text size="sm" foreground="text_muted">Minutes per day</text>
         </column>
         <toggle-group label="Daily focus goal" gap="2">
           <toggle-button size="sm" selected="{dailyGoalMinutes == 60}" disabled="{saving or hasWriteError}" on-toggle="set_daily_goal_60">1 h</toggle-button>
@@ -105,26 +105,20 @@
     </column>
   </row>
 
-  <if test="{saving}">
-    <row height="28" gap="8" cross="center" label="Saving settings">
-      <spinner />
-      <text size="sm" foreground="text_muted">Saving changes</text>
-    </row>
-  </if>
-  <else>
-    <if test="{hasWriteError}">
+  <if test="{saving or hasWriteError}">
+    <if test="{saving}">
+      <row height="28" gap="8" cross="center" label="Saving settings">
+        <spinner />
+        <text size="sm" foreground="text_muted">Saving</text>
+      </row>
+    </if>
+    <else>
       <row height="28" gap="8" cross="center" label="Settings were not saved">
-        <badge variant="destructive">Not saved</badge>
+        <text size="sm" foreground="destructive"><span weight="medium">Unable to save</span></text>
         <text size="sm" foreground="text_muted" grow="1" overflow="ellipsis">{writeErrorText}</text>
         <button size="sm" variant="ghost" on-press="discard_failed_change">Discard</button>
         <button size="sm" variant="outline" icon="refresh-cw" on-press="retry_save">Retry</button>
       </row>
-    </if>
-    <else>
-      <row height="28" gap="8" cross="center" label="Settings saved locally">
-        <column width="7" height="7" background="success" radius="sm" />
-        <text size="sm" foreground="text_muted">Saved locally on this Mac</text>
-      </row>
     </else>
-  </else>
+  </if>
 </column>

@@ -12,7 +12,6 @@
         <text><span weight="bold">Quick Focus</span></text>
         <text size="sm" foreground="text_muted">{todayGoalText}</text>
       </column>
-      <badge variant="secondary">{quickStatusLabel}</badge>
       <stack>
         <button
           size="icon"
@@ -42,10 +41,7 @@
     <else>
       <if test="{loadState == 'fatal'}">
         <column grow="1" gap="12" main="center" label="Quick Focus could not load">
-          <row gap="8" cross="center">
-            <column width="8" height="8" background="destructive" radius="sm" />
-            <text size="heading"><span weight="bold">Couldn’t open the ledger.</span></text>
-          </row>
+          <text size="heading"><span weight="bold">Couldn’t open the ledger.</span></text>
           <text wrap="true" foreground="text_muted">{fatalErrorText}</text>
           <row gap="8">
             <button variant="primary" icon="refresh-cw" on-press="retry_boot">Try again</button>
@@ -60,8 +56,7 @@
             <scroll grow="1" overscroll="rubber_band">
               <column gap="8">
                 <if test="{breakAcknowledgementOpen}">
-                  <row background="surface_subtle" radius="lg" padding="10" gap="8" cross="center" label="Break safely recorded">
-                    <icon name="check-circle" foreground="success" />
+                  <row background="surface_subtle" radius="lg" padding="10" gap="8" cross="center" label="Break recorded">
                     <column gap="1" grow="1">
                       <text><span weight="medium">Break recorded</span></text>
                       <text size="sm" wrap="true" foreground="text_muted">{breakCompletionSummary} Task stays open.</text>
@@ -76,8 +71,7 @@
                   </row>
                 </if>
 
-                <row gap="8" cross="center" label="Step 1, choose or add a task">
-                  <badge variant="secondary">1</badge>
+                <row gap="8" cross="center" label="Choose or add a task">
                   <column gap="1" grow="1">
                     <text><span weight="medium">Choose or add a task</span></text>
                     <text size="sm" foreground="text_muted">{quickTaskCountText}</text>
@@ -118,13 +112,6 @@
                         label="{q.accessibilityLabel}"
                         on-press="select_quick_task:{q.id}"
                       >
-                        <if test="{q.selected}">
-                          <column width="3" height="24" background="accent" radius="sm" />
-                        </if>
-                        <else>
-                          <spacer width="3" />
-                        </else>
-                        <spacer width="8" />
                         <text grow="1" overflow="ellipsis">{q.title}</text>
                       </list-item>
                     </for>
@@ -143,9 +130,8 @@
               </column>
             </scroll>
 
-            <column background="surface_subtle" radius="lg" padding="10" gap="8" label="Step 2, choose duration, then start">
+            <column gap="8" label="Choose duration, then start">
               <row gap="8" cross="center">
-                <badge variant="secondary">2</badge>
                 <text grow="1"><span weight="medium">Duration</span></text>
                 <toggle-group label="Focus length in minutes" gap="2">
                   <toggle-button size="sm" selected="{focusLengthMinutes == 25}" disabled="{quickControlsDisabled}" on-toggle="set_duration_25">25 min</toggle-button>
@@ -163,18 +149,15 @@
             <column gap="10">
               <if test="{sessionState == 'running'}">
                 <column background="surface_subtle" radius="xl" padding="14" gap="10" main="center" cross="center" label="Active focus transport">
-                  <row width="332" gap="10" cross="center">
-                    <column width="7" height="7" background="accent" radius="sm" />
-                    <column gap="1" grow="1">
-                      <if test="{isBreak}">
-                        <text size="sm" foreground="text_muted"><span weight="medium">Recovery block</span></text>
-                      </if>
-                      <else>
-                        <text size="sm" foreground="text_muted"><span weight="medium">Focus block</span></text>
-                      </else>
-                      <text overflow="ellipsis">{quickTaskTitle}</text>
-                    </column>
-                  </row>
+                  <column width="332" gap="1">
+                    <if test="{isBreak}">
+                      <text size="sm" foreground="text_muted"><span weight="medium">Recovery block</span></text>
+                    </if>
+                    <else>
+                      <text size="sm" foreground="text_muted"><span weight="medium">Focus block</span></text>
+                    </else>
+                    <text overflow="ellipsis">{quickTaskTitle}</text>
+                  </column>
                   <text size="display" text-alignment="center" label="{timerA11y}"><span mono="true" weight="medium" scale="1.35">{pad(remainingMinutes, 2)}:{pad(remainingSeconds, 2)}</span></text>
                   <if test="{isBreak}">
                     <progress width="332" value="{focusProgress}" label="Break progress" />
@@ -191,13 +174,10 @@
 
               <if test="{sessionState == 'paused'}">
                 <column background="surface_subtle" radius="xl" padding="14" gap="10" main="center" cross="center" label="Paused focus transport">
-                  <row width="332" gap="10" cross="center">
-                    <column width="7" height="7" background="warning" radius="sm" />
-                    <column gap="1" grow="1">
-                      <text size="sm" foreground="text_muted"><span weight="medium">Time held</span></text>
-                      <text overflow="ellipsis">{quickTaskTitle}</text>
-                    </column>
-                  </row>
+                  <column width="332" gap="1">
+                    <text size="sm" foreground="text_muted"><span weight="medium">Paused</span></text>
+                    <text overflow="ellipsis">{quickTaskTitle}</text>
+                  </column>
                   <text size="display" text-alignment="center" label="{timerA11y}"><span mono="true" weight="medium" scale="1.35">{pad(remainingMinutes, 2)}:{pad(remainingSeconds, 2)}</span></text>
                   <if test="{isBreak}">
                     <progress width="332" value="{focusProgress}" label="Paused break progress" />
@@ -214,13 +194,10 @@
 
               <if test="{sessionState == 'complete' and quickCompletionDialogOpen}">
                 <column background="surface_subtle" radius="xl" padding="14" gap="8" main="center" cross="center" label="Recorded focus block and optional task choices">
-                  <row width="332" gap="10" cross="center">
-                    <column width="7" height="7" background="success" radius="sm" />
-                    <column gap="1" grow="1">
-                      <text><span weight="bold">Focus recorded</span></text>
-                      <text size="sm" foreground="text_muted">{quickCompletionSummary}</text>
-                    </column>
-                  </row>
+                  <column width="332" gap="1">
+                    <text><span weight="bold">Focus recorded</span></text>
+                    <text size="sm" foreground="text_muted">{quickCompletionSummary}</text>
+                  </column>
                   <text width="332" overflow="ellipsis" text-alignment="center">{quickTaskTitle}</text>
                   <text width="332" wrap="true" text-alignment="center" size="sm" foreground="text_muted">The task is still open. You can reverse a completed task later.</text>
                   <column width="332" gap="6">
@@ -233,7 +210,6 @@
 
               <if test="{sessionState == 'complete' and not quickCompletionDialogOpen}">
                 <column background="surface_subtle" radius="xl" padding="14" gap="10" main="center" cross="center" label="Completed focus block">
-                  <column width="8" height="8" background="success" radius="sm" />
                   <text size="heading"><span weight="bold">Focus recorded.</span></text>
                   <text wrap="true" text-alignment="center" foreground="text_muted">The task is still open in Focus Tracker.</text>
                   <button variant="primary" on-press="open_full_app">Update task</button>
@@ -243,40 +219,23 @@
           </scroll>
         </else>
 
-        <separator />
-        <if test="{saving}">
-          <row height="32" gap="8" cross="center" label="Saving changes locally">
-            <spinner />
-            <text size="sm" foreground="text_muted">Saving locally</text>
-          </row>
-        </if>
-        <else>
-          <if test="{hasWriteError}">
-            <row height="32" gap="8" cross="center" label="Latest change was not saved">
-              <column width="7" height="7" background="destructive" radius="sm" />
-              <text size="sm" foreground="destructive"><span weight="medium">Save failed</span></text>
+        <if test="{saving or hasWriteError}">
+          <separator />
+          <if test="{saving}">
+            <row height="32" gap="8" cross="center" label="Saving changes">
+              <spinner />
+              <text size="sm" foreground="text_muted">Saving</text>
+            </row>
+          </if>
+          <else>
+            <row height="32" gap="8" cross="center" label="Changes were not saved">
+              <text size="sm" foreground="destructive"><span weight="medium">Unable to save</span></text>
               <text grow="1" size="sm" foreground="text_muted" overflow="ellipsis">{writeErrorText}</text>
               <button size="sm" variant="ghost" on-press="discard_failed_change">Discard</button>
               <button size="sm" variant="ghost" icon="refresh-cw" on-press="retry_save">Retry</button>
             </row>
-          </if>
-          <else>
-            <row height="32" gap="8" cross="center" label="Changes saved locally">
-              <column width="7" height="7" background="success" radius="sm" />
-              <if test="{sessionState == 'running'}">
-                <text size="sm" foreground="text_muted" overflow="ellipsis">Saved locally · closing keeps the timer running</text>
-              </if>
-              <else>
-                <if test="{sessionState == 'paused'}">
-                  <text size="sm" foreground="text_muted" overflow="ellipsis">Saved locally · paused time is preserved</text>
-                </if>
-                <else>
-                  <text size="sm" foreground="text_muted">Saved locally</text>
-                </else>
-              </else>
-            </row>
           </else>
-        </else>
+        </if>
       </else>
     </else>
   </column>

@@ -9,11 +9,6 @@
     <!-- Native titlebar: identity, workspace switcher, one utility action. -->
     <row window-drag="true" height="{headerHeight}" padding="8" gap="8" cross="center">
       <spacer width="{chromeLeading}" />
-      <row width="32" height="14" background="border" radius="xl" padding="2" gap="2" cross="center" label="Focus Tracker">
-        <column width="12" height="4" background="accent" radius="xl" />
-        <spacer grow="1" />
-        <column width="3" height="6" background="text" radius="sm" />
-      </row>
       <text><span weight="bold">Focus Tracker</span></text>
 
       <tabs label="Workspace sections" gap="2">
@@ -38,14 +33,6 @@
             <text foreground="text_muted">Saving</text>
           </row>
         </if>
-        <else>
-          <if test="{hasWriteError}">
-            <badge variant="destructive">Not saved</badge>
-          </if>
-          <else>
-            <spacer width="1" />
-          </else>
-        </else>
       </row>
 
       <stack>
@@ -126,13 +113,10 @@
           >
             <!-- Task rail. It contracts when a block starts, but stays useful. -->
             <column min-width="304" background="surface_subtle" padding="16" gap="14">
-              <column gap="3">
-                <row gap="8" cross="center">
-                  <text size="heading"><span weight="bold">Today</span></text>
-                  <badge variant="secondary">{filterCountText}</badge>
-                </row>
-                <text foreground="text_muted">{todayLabel}</text>
-              </column>
+              <row gap="12" cross="center">
+                <text grow="1"><span weight="bold">Today</span></text>
+                <text size="sm" foreground="text_muted">{filterCountText}</text>
+              </row>
 
               <if test="{sessionState == 'idle'}">
                 <row gap="8" cross="center">
@@ -171,8 +155,7 @@
 
               <else>
                 <if test="{sessionState == 'complete'}">
-                  <row background="surface" radius="lg" padding="12" gap="10" cross="center" label="Focus block safely recorded">
-                    <icon name="check-circle" foreground="success" />
+                  <row background="surface" radius="lg" padding="12" cross="center" label="Focus block recorded">
                     <column gap="2" grow="1">
                       <text><span weight="medium">Focus recorded</span></text>
                       <text size="sm" wrap="true" foreground="text_muted">Task remains open.</text>
@@ -180,13 +163,7 @@
                   </row>
                 </if>
                 <else>
-                  <row background="surface" radius="lg" padding="12" gap="10" cross="center">
-                    <if test="{sessionState == 'paused'}">
-                      <icon name="pause" foreground="warning" />
-                    </if>
-                    <else>
-                      <icon name="circle-dot" foreground="accent" />
-                    </else>
+                  <row background="surface" radius="lg" padding="12" cross="center">
                     <column gap="2" grow="1">
                       <if test="{sessionState == 'paused'}">
                         <if test="{isBreak}">
@@ -201,11 +178,9 @@
                       <else>
                         <if test="{isBreak}">
                           <text><span weight="medium">Break in progress</span></text>
-                          <text foreground="text_muted">The queue is resting with you.</text>
                         </if>
                         <else>
                           <text><span weight="medium">Focus block in progress</span></text>
-                          <text foreground="text_muted">Queue stays quiet until finish.</text>
                         </else>
                       </else>
                     </column>
@@ -223,13 +198,6 @@
                       on-press="select_task:{t.id}"
                       label="{t.title}"
                     >
-                      <if test="{t.id == actionTaskId}">
-                        <column width="3" height="20" background="accent" radius="sm" />
-                      </if>
-                      <else>
-                        <spacer width="3" />
-                      </else>
-                      <spacer width="7" />
                       <if test="{t.archived}">
                         <icon name="archive" foreground="text_muted" />
                       </if>
@@ -359,10 +327,9 @@
 
                   <else>
                     <column padding="28" gap="10" main="center" cross="center">
-                      <icon name="check-circle" foreground="text_muted" />
                       <if test="{taskFilter == 'open'}">
-                        <text text-alignment="center"><span weight="bold">Name the next finish line</span></text>
-                        <text width="230" wrap="true" text-alignment="center" foreground="text_muted">Add one task you can finish in a sitting.</text>
+                        <text text-alignment="center"><span weight="bold">No open tasks</span></text>
+                        <text width="230" wrap="true" text-alignment="center" foreground="text_muted">Add a task to prepare your next focus block.</text>
                       </if>
                       <if test="{taskFilter == 'completed'}">
                         <text text-alignment="center"><span weight="bold">Nothing completed yet</span></text>
@@ -386,18 +353,16 @@
               </if>
             </column>
 
-            <!-- Focus chamber: a single deliberate ritual, not a dashboard. -->
+            <!-- Timer workspace. -->
             <column min-width="540" grow="1" background="background">
               <column padding="18" gap="10">
                 <row gap="12" cross="center">
-                  <column gap="3" grow="1">
+                  <column grow="1">
                     <if test="{isBreak}">
-                      <text><span weight="bold">Break</span></text>
-                      <text foreground="text_muted">Let the previous block settle.</text>
+                      <text><span weight="bold">Break timer</span></text>
                     </if>
                     <else>
-                      <text><span weight="bold">Focus block</span></text>
-                      <text foreground="text_muted">One task. One protected interval.</text>
+                      <text><span weight="bold">Focus timer</span></text>
                     </else>
                   </column>
                   <column width="210" gap="6">
@@ -419,8 +384,7 @@
                   <column grow="1">
                     <if test="{breakAcknowledgementOpen}">
                       <row main="center">
-                        <row width="640" background="surface_subtle" radius="lg" padding="12" gap="10" cross="center" label="Break safely recorded">
-                          <icon name="check-circle" foreground="success" />
+                        <row width="640" background="surface_subtle" radius="lg" padding="12" gap="10" cross="center" label="Break recorded">
                           <column gap="2" grow="1">
                             <text><span weight="medium">Break recorded</span></text>
                             <text size="sm" foreground="text_muted">{breakCompletionSummary} Your task is still open.</text>
@@ -442,34 +406,22 @@
 
                     <row main="center">
                       <if test="{selectedTaskExists}">
-                        <column width="640" gap="18" label="Ready focus block">
+                        <column width="640" gap="18" label="Selected focus block">
                           <row gap="32" cross="end">
-                            <column grow="1" gap="10">
-                              <row gap="8" cross="center">
-                                <column width="3" height="6" background="accent" radius="sm" />
-                                <text size="sm" foreground="text_muted"><span weight="medium">Ready to protect</span></text>
-                              </row>
-
-                              <column gap="8">
-                                <text size="heading"><span weight="bold">{focusTaskTitle}</span></text>
-                                <text wrap="true" foreground="text_muted">Choose the boundary, then begin. Everything else can wait.</text>
-                              </column>
+                            <column grow="1" gap="8">
+                              <text size="heading" overflow="ellipsis">{focusTaskTitle}</text>
+                              <text wrap="true" foreground="text_muted">Choose a duration, then start the timer.</text>
                             </column>
 
                             <column width="184" gap="3" cross="end">
-                              <text size="sm" foreground="text_muted">Selected interval</text>
+                              <text size="sm" foreground="text_muted">Duration</text>
                               <text width="184" size="heading" overflow="clip" text-alignment="end" label="{selectedFocusIntervalLabel}">{pad(focusLengthMinutes, 2)}:00</text>
                             </column>
                           </row>
 
-                          <row height="12" gap="0" cross="center" label="Protected interval boundary">
-                            <column width="12" height="4" background="accent" radius="xl" />
-                            <column grow="1" height="4" background="border" radius="xl" />
-                            <column width="3" height="9" background="text" radius="sm" />
-                          </row>
+                          <separator />
 
                           <column gap="8">
-                            <text size="sm" foreground="text_muted">Block boundary</text>
                             <row gap="10" cross="center">
                               <toggle-group label="Focus length" gap="0">
                                 <toggle-button size="sm" selected="{focusLengthMinutes == 25}" disabled="{saving or hasWriteError}" on-toggle="set_duration_25">25 min</toggle-button>
@@ -490,35 +442,18 @@
                       </if>
 
                       <else>
-                        <column width="640" gap="18" label="Choose a focus task">
-                          <row gap="8" cross="center">
-                            <column width="3" height="6" background="text_muted" radius="sm" />
-                            <text size="sm" foreground="text_muted"><span weight="medium">Focus waits for a task</span></text>
-                          </row>
-
-                          <column gap="8">
-                            <text size="heading"><span weight="bold">Choose the work that deserves quiet</span></text>
+                        <column width="640" gap="12" label="Choose a focus task">
+                          <column gap="10">
+                            <text size="heading"><span weight="bold">Choose a task to focus on</span></text>
                             <if test="{taskFilter == 'open'}">
-                              <text wrap="true" foreground="text_muted">Select an open task in the ledger to prepare a focus block.</text>
+                              <text wrap="true" foreground="text_muted">Select an open task in the ledger to prepare the timer.</text>
                             </if>
                             <else>
                               <text wrap="true" foreground="text_muted">Return to open tasks to choose your next block.</text>
-                            </else>
-                          </column>
-
-                          <row height="12" gap="0" cross="center" label="Protected interval boundary unavailable">
-                            <column width="12" height="4" background="border" radius="xl" />
-                            <column grow="1" height="4" background="border" radius="xl" />
-                            <column width="3" height="9" background="text_muted" radius="sm" />
-                          </row>
-
-                          <column gap="10">
-                            <text size="sm" wrap="true" foreground="text_muted">The selected task becomes the only work inside the protected block.</text>
-                            <if test="{taskFilter != 'open'}">
                               <row>
                                 <button variant="outline" on-press="show_open_tasks">Show open tasks</button>
                               </row>
-                            </if>
+                            </else>
                           </column>
                         </column>
                       </else>
@@ -534,16 +469,11 @@
 
                   <if test="{sessionState == 'running'}">
                     <column background="surface_subtle" radius="lg" padding="24" gap="14" main="center" cross="center">
-                      <row width="420" height="6" gap="0" cross="center" label="Active focus boundary">
-                        <column width="20" height="4" background="accent" radius="xl" />
-                        <column grow="1" height="4" background="border" radius="xl" />
-                        <column width="3" height="6" background="text" radius="sm" />
-                      </row>
                       <if test="{isBreak}">
-                        <badge variant="secondary">Break in progress</badge>
+                        <text size="sm" foreground="text_muted"><span weight="medium">Break in progress</span></text>
                       </if>
                       <else>
-                        <badge variant="primary">Focus in progress</badge>
+                        <text size="sm" foreground="text_muted"><span weight="medium">Focus in progress</span></text>
                       </else>
                       <text width="420" text-alignment="center"><span weight="medium">{focusTaskTitle}</span></text>
                       <text size="display" text-alignment="center" label="{timerA11y}">
@@ -580,12 +510,7 @@
 
                   <if test="{sessionState == 'paused'}">
                     <column background="surface" radius="lg" padding="24" gap="14" main="center" cross="center">
-                      <row width="420" height="6" gap="0" cross="center" label="Paused focus boundary">
-                        <column width="20" height="4" background="warning" radius="xl" />
-                        <column grow="1" height="4" background="border" radius="xl" />
-                        <column width="3" height="6" background="warning" radius="sm" />
-                      </row>
-                      <badge variant="secondary">Paused</badge>
+                      <text size="sm" foreground="text_muted"><span weight="medium">Paused</span></text>
                       <text width="420" text-alignment="center"><span weight="medium">{focusTaskTitle}</span></text>
                       <text size="display" text-alignment="center" label="{timerA11y}">
                         <span mono="true" weight="medium" scale="1.7">{pad(remainingMinutes, 2)}:{pad(remainingSeconds, 2)}</span>
@@ -621,11 +546,6 @@
 
                   <if test="{sessionState == 'complete'}">
                     <column height="324" background="surface_subtle" radius="lg" padding="22" gap="8" main="center" cross="center" label="Recorded focus block and optional task choices">
-                      <row width="400" height="6" gap="0" cross="center" label="Completed focus boundary">
-                        <column grow="1" height="4" background="success" radius="xl" />
-                        <column width="6" height="6" background="success" radius="sm" />
-                      </row>
-                      <icon name="check-circle" foreground="success" />
                       <text size="heading" text-alignment="center"><span weight="bold">Focus recorded</span></text>
                       <text width="400" wrap="true" text-alignment="center" foreground="text_muted">{completionSummary}</text>
                       <text width="400" wrap="true" text-alignment="center" foreground="text_muted">The task is still open. Marking it complete can be reversed from Completed.</text>
@@ -641,35 +561,6 @@
                 </else>
               </column>
 
-              <separator />
-              <row padding="12" gap="10" cross="center">
-                <if test="{hasWriteError}">
-                  <icon name="alert" foreground="destructive" />
-                  <text grow="1" foreground="destructive">A local change needs your attention.</text>
-                </if>
-                <else>
-                  <if test="{saving}">
-                    <spinner />
-                    <text grow="1" foreground="text_muted">Saving locally</text>
-                  </if>
-                  <else>
-                    <column width="7" height="7" background="success" radius="xl" />
-                    <text grow="1" foreground="text_muted">Saved locally</text>
-                  </else>
-                </else>
-                  <if test="{sessionState == 'running'}">
-                    <text foreground="text_muted">Active blocks continue when this window closes.</text>
-                </if>
-                <else>
-                  <if test="{sessionState == 'paused'}">
-                    <text foreground="text_muted">Paused time is preserved when this window closes.</text>
-                  </if>
-                  <else>
-                      <text foreground="text_muted">Your ledger stays on this Mac.</text>
-                    </else>
-                  </else>
-                  <spacer width="12" />
-                </row>
             </column>
           </split>
         </if>
@@ -682,7 +573,7 @@
                 <row gap="18" cross="end">
                   <column gap="6" grow="1">
                     <text size="heading"><span weight="bold">Focus ledger</span></text>
-                    <text wrap="true" foreground="text_muted">Protected time, recorded without scores or streaks.</text>
+                    <text wrap="true" foreground="text_muted">Completed focus blocks and totals.</text>
                   </column>
                   <badge variant="secondary">{weekSessionText}</badge>
                 </row>
@@ -697,7 +588,7 @@
                     </if>
                     <else>
                       <if test="{hasWeekFocus}">
-                        <text><span weight="medium">First signal captured</span></text>
+                        <text><span weight="medium">First focus recorded</span></text>
                         <text size="sm" foreground="text_muted">Less than one focused minute</text>
                       </if>
                       <else>
@@ -719,7 +610,7 @@
                 <column background="surface" radius="lg" padding="16" gap="10">
                   <row gap="12" cross="center">
                     <column gap="3" grow="1">
-                      <text><span weight="medium">Seven-day rhythm</span></text>
+                      <text><span weight="medium">Focus by day</span></text>
                       <text size="sm" foreground="text_muted">Minutes of completed focus</text>
                     </column>
                     <text size="sm" foreground="text_muted">Scaled to your {dailyGoalMinutes} min goal</text>
@@ -756,19 +647,15 @@
 
                   <else>
                     <if test="{hasWeekFocus}">
-                      <row background="surface_subtle" radius="lg" padding="12" gap="12" cross="center" label="First focus signal recorded">
-                        <column width="7" height="7" background="accent" radius="sm" />
-                        <column gap="3" grow="1">
-                          <text><span weight="medium">Your rhythm has started.</span></text>
-                          <text size="sm" wrap="true" foreground="text_muted">Your first full minute will appear here.</text>
-                        </column>
-                      </row>
+                      <column background="surface_subtle" radius="lg" padding="12" gap="3" label="First focus recorded">
+                        <text><span weight="medium">First focus recorded</span></text>
+                        <text size="sm" wrap="true" foreground="text_muted">Your first full minute will appear here.</text>
+                      </column>
                     </if>
                     <else>
                       <column padding="24" gap="10" main="center" cross="center" label="No focus recorded in the last seven days">
-                        <icon name="clock" foreground="text_muted" />
                         <text><span weight="medium">No focus recorded this week</span></text>
-                        <text width="360" wrap="true" text-alignment="center" foreground="text_muted">Your first completed block will establish the rhythm.</text>
+                        <text width="360" wrap="true" text-alignment="center" foreground="text_muted">Complete a block to add data to this chart.</text>
                       </column>
                     </else>
                   </else>

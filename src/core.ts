@@ -855,10 +855,6 @@ export function canCommitRename(model: Model): boolean {
   );
 }
 
-export function todayLabel(_model: Model): Bytes {
-  return asciiBytes("A quiet ledger for today");
-}
-
 function remainingTaskCount(model: Model): number {
   return model.tasks.filter((task) => task.state === "open").length;
 }
@@ -976,15 +972,6 @@ export function quickStartLabel(model: Model): Bytes {
 
 export function selectedFocusIntervalLabel(model: Model): Bytes {
   return asciiBytes(`Selected focus interval, ${model.settings.focusMinutes} minutes`);
-}
-
-export function quickStatusLabel(model: Model): Bytes {
-  if (model.breakAcknowledgementOpen) return asciiBytes("Break recorded");
-  const state = sessionState(model);
-  if (state === "complete") return asciiBytes("Recorded");
-  if (state === "paused") return asciiBytes("Paused");
-  if (state === "running") return isBreak(model) ? asciiBytes("On break") : asciiBytes("Focusing");
-  return asciiBytes("Ready");
 }
 
 export function mainEndDialogOpen(model: Model): boolean {
