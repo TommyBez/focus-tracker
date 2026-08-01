@@ -652,15 +652,11 @@
   }
 
   .productScreenshot {
-    aspect-ratio: 1.18;
     padding: 4px;
     border-radius: 10px;
   }
 
   .productScreenshot img {
-    width: 155%;
-    max-width: none;
-    transform: translateX(-22%);
     border-radius: 6px;
   }
 
