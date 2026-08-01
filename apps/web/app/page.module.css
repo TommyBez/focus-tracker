@@ -1,0 +1,708 @@
+.skipLink {
+  position: fixed;
+  z-index: 100;
+  top: 12px;
+  left: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 13px;
+  font-weight: 700;
+  transform: translateY(-160%);
+  transition: transform 160ms ease;
+}
+
+.skipLink:focus {
+  transform: translateY(0);
+}
+
+.siteHeader {
+  width: var(--content);
+  min-height: 76px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.brand,
+.footerBrand {
+  width: max-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 760;
+  letter-spacing: -0.015em;
+  text-decoration: none;
+}
+
+.brandIcon {
+  border-radius: 9px;
+  box-shadow: 0 6px 16px rgba(17, 18, 24, 0.18);
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+}
+
+.nav a,
+.footerLinks a {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 560;
+  text-decoration: none;
+  transition: color 150ms ease;
+}
+
+.nav a:hover,
+.footerLinks a:hover {
+  color: var(--cobalt);
+}
+
+.headerDownload {
+  min-height: 40px;
+  padding: 0 16px;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--ink);
+  border-radius: 5px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background-color 150ms ease, color 150ms ease, transform 120ms ease;
+}
+
+.headerDownload:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.headerDownload:active,
+.primaryCta:active,
+.checksumLink:active {
+  transform: scale(0.98);
+}
+
+.hero,
+.methodSection,
+.privacySection,
+.installSection,
+.faqSection,
+.footer {
+  width: var(--content);
+  margin: 0 auto;
+}
+
+.hero {
+  padding: clamp(78px, 9vw, 132px) 0 clamp(90px, 11vw, 150px);
+}
+
+.heroGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(310px, 0.62fr);
+  gap: clamp(42px, 6vw, 92px);
+  align-items: end;
+}
+
+.hero h1 {
+  max-width: 900px;
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(64px, 6.45vw, 94px);
+  font-weight: 760;
+  letter-spacing: -0.067em;
+  line-height: 0.88;
+}
+
+.hero h1 span {
+  display: block;
+  color: var(--cobalt);
+  white-space: nowrap;
+}
+
+.heroIntro {
+  padding-bottom: 7px;
+  animation: intro-reveal 600ms 80ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.heroIntro > p:first-child {
+  max-width: 430px;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: clamp(17px, 1.5vw, 20px);
+  line-height: 1.55;
+}
+
+.downloadActions {
+  margin-top: 30px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.primaryCta {
+  min-height: 48px;
+  padding: 0 19px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid var(--cobalt);
+  border-radius: 5px;
+  background: var(--cobalt);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 720;
+  line-height: 1;
+  text-decoration: none;
+  transition: background-color 150ms ease, border-color 150ms ease, transform 120ms ease;
+}
+
+.primaryCta:hover {
+  border-color: var(--cobalt-dark);
+  background: var(--cobalt-dark);
+}
+
+.checksumLink {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: underline;
+  transition: color 150ms ease, transform 120ms ease;
+}
+
+.checksumLink:hover {
+  color: var(--cobalt);
+}
+
+.platformNote {
+  margin: 17px 0 0;
+  color: var(--ink-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.productProof {
+  margin: clamp(62px, 8vw, 108px) 0 0;
+  animation: proof-reveal 720ms 140ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.productScreenshot {
+  padding: clamp(5px, 0.7vw, 9px);
+  overflow: hidden;
+  border: 1px solid #15161a;
+  border-radius: 18px;
+  background: #15161a;
+  box-shadow: 0 28px 70px rgba(17, 18, 24, 0.2);
+}
+
+.productScreenshot img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 12px;
+}
+
+.sectionIntro h2,
+.privacySection h2,
+.installIntro h2,
+.faqSection > h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(48px, 5.8vw, 82px);
+  font-weight: 720;
+  letter-spacing: -0.06em;
+  line-height: 0.98;
+}
+
+.methodSection,
+.installSection,
+.faqSection {
+  padding: clamp(88px, 10vw, 144px) 0;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.sectionIntro {
+  max-width: 880px;
+}
+
+.sectionIntro > p {
+  max-width: 590px;
+  margin: 28px 0 0;
+  color: var(--ink-soft);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.workflowList {
+  margin: clamp(58px, 7vw, 92px) 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--ink);
+}
+
+.workflowList li {
+  min-height: 142px;
+  padding: 28px 0;
+  display: grid;
+  grid-template-columns: minmax(190px, 0.55fr) minmax(280px, 1fr) minmax(220px, 0.72fr);
+  gap: clamp(32px, 5vw, 76px);
+  align-items: center;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.workflowList h3,
+.installGuide h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(28px, 3vw, 40px);
+  font-weight: 680;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+}
+
+.workflowList p {
+  max-width: 680px;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.workflowEvidence {
+  padding-left: clamp(20px, 2.5vw, 34px);
+  border-left: 2px solid var(--cobalt);
+}
+
+.workflowEvidence strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.workflowEvidence p {
+  margin-top: 7px;
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.privacySection {
+  padding: clamp(94px, 12vw, 168px) 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(310px, 0.65fr);
+  gap: clamp(58px, 10vw, 150px);
+  align-items: start;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.kicker {
+  margin: 0 0 24px;
+  color: var(--cobalt);
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.privacySection h2 {
+  max-width: 820px;
+}
+
+.privacyDetail > p {
+  margin: 7px 0 0;
+  color: var(--ink-soft);
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.privacyFacts,
+.requirements {
+  margin: 42px 0 0;
+  border-top: 1px solid var(--ink);
+}
+
+.privacyFacts div,
+.requirements div {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.privacyFacts dt,
+.requirements dt {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.privacyFacts dd,
+.requirements dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 680;
+  text-align: right;
+}
+
+.installSection {
+  display: grid;
+  grid-template-columns: minmax(330px, 0.72fr) minmax(0, 1fr);
+  gap: clamp(70px, 11vw, 168px);
+  align-items: start;
+}
+
+.installIntro h2 {
+  font-size: clamp(46px, 5vw, 70px);
+}
+
+.installIntro > p {
+  margin: 30px 0 0;
+  color: var(--ink-soft);
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.requirements {
+  margin-top: 34px;
+}
+
+.installGuide {
+  padding-top: 6px;
+}
+
+.installGuide h3 {
+  padding-bottom: 26px;
+  border-bottom: 1px solid var(--ink);
+  font-size: 28px;
+}
+
+.installGuide ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: install-step;
+}
+
+.installGuide li {
+  min-height: 130px;
+  padding: 28px 0 26px 52px;
+  position: relative;
+  border-bottom: 1px solid var(--rule-strong);
+  counter-increment: install-step;
+}
+
+.installGuide li::before {
+  content: counter(install-step, decimal-leading-zero);
+  position: absolute;
+  top: 30px;
+  left: 0;
+  color: var(--cobalt);
+  font-size: 11px;
+  font-weight: 720;
+  font-variant-numeric: tabular-nums;
+}
+
+.installGuide strong {
+  color: var(--ink);
+  font-size: 17px;
+}
+
+.installGuide li p {
+  margin: 8px 0 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.installGuide a {
+  color: var(--cobalt-dark);
+  font-weight: 650;
+}
+
+.securityNotice {
+  margin: 26px 0 0;
+  padding: 0 0 0 18px;
+  border-left: 3px solid #9a6618;
+  color: #664a27;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.faqSection {
+  display: block;
+}
+
+.faqSection > h2 {
+  font-size: clamp(44px, 4.8vw, 66px);
+}
+
+.faqList {
+  width: min(72%, 900px);
+  margin: 54px 0 0 auto;
+  border-top: 1px solid var(--ink);
+}
+
+.faqList details {
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.faqList summary {
+  min-height: 82px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 17px;
+  font-weight: 650;
+  list-style: none;
+}
+
+.faqList summary::-webkit-details-marker {
+  display: none;
+}
+
+.faqToggle {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.faqToggle::before,
+.faqToggle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 1px;
+  background: var(--cobalt);
+  transition: transform 160ms ease;
+}
+
+.faqToggle::after {
+  transform: rotate(90deg);
+}
+
+.faqList details[open] .faqToggle::after {
+  transform: rotate(0);
+}
+
+.faqList details > p {
+  max-width: 690px;
+  margin: -2px 34px 28px 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.footer {
+  min-height: 126px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 28px;
+}
+
+.footer > p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.footerLinks {
+  justify-self: end;
+  display: flex;
+  gap: 24px;
+}
+
+@keyframes intro-reveal {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes proof-reveal {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 1080px) {
+  .siteHeader {
+    grid-template-columns: 1fr auto;
+  }
+
+  .nav {
+    display: none;
+  }
+
+  .heroGrid,
+  .privacySection,
+  .installSection,
+  .faqSection {
+    grid-template-columns: 1fr;
+  }
+
+  .heroGrid {
+    gap: 40px;
+  }
+
+  .hero h1 span {
+    white-space: normal;
+  }
+
+  .heroIntro {
+    max-width: 590px;
+  }
+
+  .workflowList li {
+    grid-template-columns: minmax(160px, 0.5fr) 1fr;
+  }
+
+  .workflowEvidence {
+    grid-column: 2;
+  }
+
+  .privacySection,
+  .installSection,
+  .faqSection {
+    gap: 46px;
+  }
+
+  .sectionIntro > p,
+  .privacyDetail {
+    max-width: 660px;
+  }
+
+  .footer {
+    grid-template-columns: 1fr auto;
+  }
+
+  .footer > p {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .siteHeader {
+    min-height: 68px;
+  }
+
+  .brandIcon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .brand {
+    font-size: 13px;
+  }
+
+  .headerDownload {
+    min-height: 38px;
+    padding: 0 12px;
+    font-size: 12px;
+  }
+
+  .hero {
+    padding-top: 64px;
+  }
+
+  .hero h1 {
+    font-size: clamp(53px, 16vw, 74px);
+    line-height: 0.92;
+  }
+
+  .heroIntro > p:first-child {
+    font-size: 16px;
+  }
+
+  .downloadActions {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .primaryCta {
+    width: 100%;
+  }
+
+  .productScreenshot {
+    padding: 4px;
+    border-radius: 10px;
+  }
+
+  .productScreenshot img {
+    border-radius: 6px;
+  }
+
+  .sectionIntro h2,
+  .privacySection h2,
+  .installIntro h2,
+  .faqSection > h2 {
+    font-size: 44px;
+  }
+
+  .workflowList li {
+    min-height: 0;
+    padding: 30px 0;
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .workflowEvidence {
+    grid-column: auto;
+    margin-top: 5px;
+  }
+
+  .installGuide li {
+    padding-left: 40px;
+  }
+
+  .faqList summary {
+    min-height: 74px;
+    font-size: 15px;
+  }
+
+  .faqList {
+    width: 100%;
+    margin-top: 40px;
+  }
+
+  .footer {
+    min-height: 170px;
+    grid-template-columns: 1fr;
+    align-content: center;
+    gap: 18px;
+  }
+
+  .footerLinks {
+    justify-self: start;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .siteHeader {
+    grid-template-columns: 1fr;
+  }
+
+  .headerDownload {
+    display: none;
+  }
+}

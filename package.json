@@ -1,17 +1,21 @@
 {
-  "name": "focus-tracker",
+  "name": "focus-tracker-monorepo",
   "private": true,
-  "description": "Pinned authoring toolchain for the Native SDK TypeScript core.",
-  "scripts": {
-    "check": "native validate app.zon && native test && native check --strict",
-    "package:app": "./scripts/package-app.sh",
-    "package:dmg": "./scripts/build-dmg.sh",
-    "verify:dmg": "./scripts/verify-dmg.sh --expect-background --expect-volume-icon"
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22.15 <23",
+    "pnpm": "10.33.0"
   },
-  "dependencies": {
-    "@native-sdk/core": "0.6.2"
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "check": "turbo run check",
+    "package:desktop": "turbo run package:dmg --filter=@focus-tracker/desktop"
   },
   "devDependencies": {
-    "@typescript/old": "npm:typescript@6.0.3"
+    "turbo": "2.10.8"
   }
 }

@@ -1,0 +1,72 @@
+.{
+    .id = "com.tommaso.focustracker",
+    .name = "focus-tracker",
+    .display_name = "Focus Tracker",
+    .description = "A quiet native task ledger and focus timer for macOS.",
+    .version = "0.1.1",
+    .icons = .{"assets/icon.png"},
+    .platforms = .{"macos"},
+    .permissions = .{ "view", "command", "window", "filesystem" },
+    .capabilities = .{ "native_views", "gpu_surfaces", "shortcuts", "filesystem", "tray" },
+    .theme = "house",
+    .theme_accent = "#3156D9",
+    .commands = .{
+        .{ .id = "app.new-task", .title = "New Task" },
+        .{ .id = "app.today", .title = "Today" },
+        .{ .id = "app.ledger", .title = "Focus Ledger" },
+        .{ .id = "app.toggle-focus", .title = "Start or Pause Focus" },
+        .{ .id = "app.quick", .title = "Quick Focus" },
+        .{ .id = "app.settings", .title = "Settings" },
+        .{ .id = "app.escape", .title = "Cancel or Close" },
+    },
+    .shortcuts = .{
+        .{ .id = "app.new-task", .key = "n", .modifiers = .{"primary"} },
+        .{ .id = "app.today", .key = "1", .modifiers = .{"primary"} },
+        .{ .id = "app.ledger", .key = "2", .modifiers = .{"primary"} },
+        .{ .id = "app.toggle-focus", .key = "space", .modifiers = .{ "primary", "shift" } },
+        .{ .id = "app.quick", .key = "f", .modifiers = .{ "primary", "shift" } },
+        .{ .id = "app.settings", .key = ",", .modifiers = .{"primary"} },
+        // Escape intentionally stays out of the host shortcut monitor. The
+        // canvas adapter needs the original key event and IME edit payload to
+        // cancel composition before it dispatches a source-aware dismissal.
+    },
+    .shell = .{
+        .windows = .{
+            .{
+                .label = "main",
+                .title = "Focus Tracker",
+                .width = 1180,
+                .height = 760,
+                .min_width = 960,
+                .min_height = 640,
+                .restore_state = true,
+                .restore_policy = "clamp_to_visible_screen",
+                .titlebar = "hidden_inset_tall",
+                .close_policy = "hide",
+                .views = .{
+                    .{
+                        .label = "main-canvas",
+                        .kind = "gpu_surface",
+                        .fill = true,
+                        .role = "Focus Tracker workspace",
+                        .accessibility_label = "Focus Tracker",
+                        .gpu_backend = "metal",
+                        .gpu_pixel_format = "bgra8_unorm",
+                        .gpu_present_mode = "timer",
+                        .gpu_alpha_mode = "opaque",
+                        .gpu_color_space = "srgb",
+                        .gpu_vsync = true,
+                    },
+                },
+            },
+        },
+    },
+    .security = .{
+        .navigation = .{
+            .allowed_origins = .{ "zero://app", "zero://inline" },
+            .external_links = .{ .action = "deny" },
+        },
+    },
+    .web_engine = "system",
+    .cef = .{ .dir = "third_party/cef/macos", .auto_install = false },
+}

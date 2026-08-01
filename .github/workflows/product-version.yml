@@ -1,0 +1,217 @@
+name: Product version
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: read
+  statuses: write
+
+jobs:
+  product-version:
+    name: product-version
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Deliberately do not check out the pull request. The only JavaScript
+      # executed below is this workflow plus the helper fetched from base.sha.
+      - name: Enforce the desktop product version
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const STATUS_CONTEXT = "product-version";
+            const APP_PATH = "apps/desktop/app.zon";
+            const BUILD_PATH = "apps/desktop/build.zig.zon";
+            const pr = context.payload.pull_request;
+            let finalSha = pr?.head?.sha || context.sha;
+            let statusState = "failure";
+            let statusDescription = "Product version validation did not complete";
+            let failure;
+
+            function splitRepository(fullName) {
+              const separator = fullName.indexOf("/");
+              if (separator <= 0 || separator === fullName.length - 1) {
+                throw new Error(`invalid repository name: ${fullName}`);
+              }
+              return { owner: fullName.slice(0, separator), repo: fullName.slice(separator + 1) };
+            }
+
+            function shortDescription(value) {
+              return String(value).replace(/\s+/g, " ").trim().slice(0, 140) || "Product version validation failed";
+            }
+
+            async function readRepositoryFile(repository, path, ref) {
+              const response = await github.rest.repos.getContent({
+                owner: repository.owner,
+                repo: repository.repo,
+                path,
+                ref,
+              });
+              const data = response.data;
+              if (Array.isArray(data) || data.type !== "file" || typeof data.content !== "string") {
+                throw new Error(`${repository.owner}/${repository.repo}:${path}@${ref} is not a readable file`);
+              }
+              if (data.encoding !== "base64") {
+                throw new Error(`${repository.owner}/${repository.repo}:${path}@${ref} has unsupported encoding ${data.encoding}`);
+              }
+              return Buffer.from(data.content.replace(/\n/g, ""), "base64").toString("utf8");
+            }
+
+            async function loadTrustedHelper(baseRepository, baseSha) {
+              const helperPath = ".github/scripts/product-version.js";
+              const source = await readRepositoryFile(baseRepository, helperPath, baseSha);
+              const moduleRecord = { exports: {} };
+              const denyRequire = (specifier) => {
+                throw new Error(`trusted metadata helper attempted to require ${specifier}`);
+              };
+              const factory = new Function(
+                "module",
+                "exports",
+                "require",
+                "__filename",
+                "__dirname",
+                `${source}\n//# sourceURL=${helperPath}`,
+              );
+              factory(moduleRecord, moduleRecord.exports, denyRequire, helperPath, ".github/scripts");
+              return moduleRecord.exports;
+            }
+
+            try {
+              if (!pr || !pr.base?.repo?.full_name || !pr.head?.sha) {
+                throw new Error("pull_request_target payload is missing base/head metadata");
+              }
+
+              const baseRepository = splitRepository(pr.base.repo.full_name);
+              const helper = await loadTrustedHelper(baseRepository, pr.base.sha);
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                per_page: 100,
+              });
+
+              if (files.length !== pr.changed_files) {
+                throw new Error(`GitHub returned ${files.length} of ${pr.changed_files} changed files; refusing an incomplete scope decision`);
+              }
+
+              const productFiles = files.filter(helper.isProductFileChange);
+              if (productFiles.length === 0) {
+                statusState = "success";
+                statusDescription = "No desktop product files changed";
+                core.info(statusDescription);
+              } else {
+                if (!pr.head.repo?.full_name) {
+                  throw new Error("the pull request head repository is unavailable");
+                }
+
+                const headRepository = splitRepository(pr.head.repo.full_name);
+                const [baseApp, baseBuild, headApp, headBuild] = await Promise.all([
+                  readRepositoryFile(baseRepository, APP_PATH, pr.base.sha),
+                  readRepositoryFile(baseRepository, BUILD_PATH, pr.base.sha),
+                  readRepositoryFile(headRepository, APP_PATH, pr.head.sha),
+                  readRepositoryFile(headRepository, BUILD_PATH, pr.head.sha),
+                ]);
+
+                const baseAppVersion = helper.readTopLevelVersion(baseApp, `base ${APP_PATH}`);
+                const baseBuildVersion = helper.readTopLevelVersion(baseBuild, `base ${BUILD_PATH}`);
+                if (baseAppVersion !== baseBuildVersion) {
+                  throw new Error(`base desktop versions differ: ${baseAppVersion} vs ${baseBuildVersion}`);
+                }
+
+                const headAppVersion = helper.readTopLevelVersion(headApp, `head ${APP_PATH}`);
+                const headBuildVersion = helper.readTopLevelVersion(headBuild, `head ${BUILD_PATH}`);
+                if (headAppVersion !== headBuildVersion) {
+                  throw new Error(`head desktop versions differ: ${headAppVersion} vs ${headBuildVersion}`);
+                }
+
+                // Validate that the dependency still carries a concrete Zig
+                // content hash. Automatic edits below must preserve it byte-for-byte.
+                helper.extractNativeSdkHash(headBuild, `head ${BUILD_PATH}`);
+                const expectedVersion = helper.bumpPatch(baseAppVersion);
+                const versionComparison = helper.compareVersions(headAppVersion, baseAppVersion);
+                const sameRepository =
+                  pr.head.repo.full_name.toLowerCase() === pr.base.repo.full_name.toLowerCase();
+
+                if (versionComparison > 0) {
+                  statusState = "success";
+                  statusDescription = `Desktop version advances ${baseAppVersion} to ${headAppVersion}`;
+                  core.info(statusDescription);
+                } else if (versionComparison === 0 && sameRepository) {
+                  const updatedApp = helper.replaceTopLevelVersion(headApp, expectedVersion, APP_PATH);
+                  const updatedBuild = helper.replaceTopLevelVersion(headBuild, expectedVersion, BUILD_PATH);
+                  helper.assertNativeSdkHashPreserved(headBuild, updatedBuild, BUILD_PATH);
+
+                  const mutation = `
+                    mutation CreateProductVersionCommit($input: CreateCommitOnBranchInput!) {
+                      createCommitOnBranch(input: $input) {
+                        commit { oid url }
+                      }
+                    }
+                  `;
+                  const result = await github.graphql(mutation, {
+                    input: {
+                      branch: {
+                        repositoryNameWithOwner: pr.base.repo.full_name,
+                        branchName: pr.head.ref,
+                      },
+                      expectedHeadOid: pr.head.sha,
+                      message: {
+                        headline: `chore(desktop): bump version to ${expectedVersion}`,
+                        body: "Atomic product-version metadata update generated by GitHub Actions.",
+                      },
+                      fileChanges: {
+                        additions: [
+                          { path: APP_PATH, contents: Buffer.from(updatedApp, "utf8").toString("base64") },
+                          { path: BUILD_PATH, contents: Buffer.from(updatedBuild, "utf8").toString("base64") },
+                        ],
+                      },
+                    },
+                  });
+
+                  finalSha = result.createCommitOnBranch.commit.oid;
+                  const [committedApp, committedBuild] = await Promise.all([
+                    readRepositoryFile(baseRepository, APP_PATH, finalSha),
+                    readRepositoryFile(baseRepository, BUILD_PATH, finalSha),
+                  ]);
+                  if (committedApp !== updatedApp || committedBuild !== updatedBuild) {
+                    throw new Error("atomic version commit readback did not match the requested metadata contents");
+                  }
+                  if (
+                    helper.readTopLevelVersion(committedApp, `committed ${APP_PATH}`) !== expectedVersion ||
+                    helper.readTopLevelVersion(committedBuild, `committed ${BUILD_PATH}`) !== expectedVersion
+                  ) {
+                    throw new Error("atomic version commit readback has an unexpected version");
+                  }
+                  helper.assertNativeSdkHashPreserved(headBuild, committedBuild, BUILD_PATH);
+
+                  statusState = "success";
+                  statusDescription = `Bumped desktop version ${baseAppVersion} to ${expectedVersion}`;
+                  core.info(`${statusDescription}: ${result.createCommitOnBranch.commit.url}`);
+                } else if (versionComparison === 0 && !sameRepository) {
+                  throw new Error(`fork pull requests must set both desktop versions above base ${baseAppVersion}`);
+                } else {
+                  throw new Error(
+                    `desktop version ${headAppVersion} must not be lower than base ${baseAppVersion}`,
+                  );
+                }
+              }
+            } catch (error) {
+              failure = error instanceof Error ? error : new Error(String(error));
+              statusDescription = shortDescription(failure.message);
+              core.error(failure.stack || failure.message);
+            } finally {
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: finalSha,
+                state: statusState,
+                context: STATUS_CONTEXT,
+                description: shortDescription(statusDescription),
+                target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              });
+              core.info(`Published ${STATUS_CONTEXT}=${statusState} on ${finalSha}`);
+            }
+
+            if (failure) throw failure;
