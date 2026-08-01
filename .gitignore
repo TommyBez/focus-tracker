@@ -1,10 +1,37 @@
-# Editor and dependency state
-.DS_Store
+# Dependencies and package-manager state
 node_modules/
-.turbo/
+.pnp
+.pnp.*
+.pnpm-store/
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Next.js, Turborepo, and TypeScript output
 .next/
-.vercel/
+out/
+.turbo/
 *.tsbuildinfo
+next-env.d.ts
+
+# Test output
+coverage/
+
+# Deployment state
+.vercel/
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# OS files and local certificates
+.DS_Store
+*.pem
 
 # Native SDK / Zig build output
 .native/
@@ -22,7 +49,7 @@ dist/
 .native-automation/
 automation-artifacts/
 
-# Local environment files
-.env
-.env.*
+# Local environment files (examples remain versionable)
+.env*
 !.env.example
+!.env.*.example
