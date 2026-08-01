@@ -9,19 +9,17 @@
 
 .main p {
   margin: 0;
-  color: var(--cobalt-bright);
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: 0.16em;
+  color: var(--cobalt);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .main h1 {
   max-width: 680px;
   margin: 0;
-  font-family: var(--serif);
   font-size: clamp(56px, 10vw, 96px);
-  font-weight: 420;
-  letter-spacing: -0.045em;
+  font-weight: 720;
+  letter-spacing: -0.06em;
   line-height: 0.95;
 }
 

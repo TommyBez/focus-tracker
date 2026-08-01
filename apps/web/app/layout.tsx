@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Manrope, Newsreader } from "next/font/google";
+import { Manrope } from "next/font/google";
 import type { ReactNode } from "react";
 import "./globals.css";
 import { getSiteUrl, PRODUCT_NAME } from "./site";
@@ -10,20 +10,14 @@ const manrope = Manrope({
   display: "swap",
 });
 
-const newsreader = Newsreader({
-  subsets: ["latin"],
-  variable: "--font-newsreader",
-  display: "swap",
-});
-
 const description =
   "A native macOS focus timer for choosing one task, committing to a timed block, and keeping a private local ledger.";
 
 export const metadata: Metadata = {
   metadataBase: getSiteUrl(),
   title: {
-    default: "Focus Tracker — Commit to the block",
-    template: `%s — ${PRODUCT_NAME}`,
+    default: "Focus Tracker: Commit to the block",
+    template: `%s | ${PRODUCT_NAME}`,
   },
   description,
   applicationName: PRODUCT_NAME,
@@ -50,7 +44,7 @@ export const metadata: Metadata = {
         url: "/opengraph-image",
         width: 1200,
         height: 630,
-        alt: "Focus Tracker cobalt timer instrument",
+        alt: "Focus Tracker: Choose the work. Commit to the block.",
       },
     ],
   },
@@ -65,13 +59,13 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0d0f13",
-  colorScheme: "dark",
+  themeColor: "#f2f1ec",
+  colorScheme: "light",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en" className={`${manrope.variable} ${newsreader.variable}`}>
+    <html lang="en" className={manrope.variable}>
       <body>{children}</body>
     </html>
   );

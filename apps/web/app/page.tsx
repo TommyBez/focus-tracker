@@ -11,19 +11,22 @@ import {
 
 const workflow = [
   {
-    index: "01",
-    title: "Choose the task",
-    copy: "Select one open task. The rest of the list stays visible, but out of the chamber.",
+    title: "Choose",
+    copy: "Select one open task before the clock can start. Your other work stays visible, but outside the block.",
+    evidenceTitle: "Quick Focus",
+    evidenceCopy: "Open the same task and timer from the menu bar or keyboard.",
   },
   {
-    index: "02",
-    title: "Set the block",
-    copy: "Commit to 25, 50, or 90 minutes. Pause, resume, or finish deliberately.",
+    title: "Commit",
+    copy: "Give it 25, 50, or 90 minutes. Pause, resume, or end the block deliberately.",
+    evidenceTitle: "Session recovery",
+    evidenceCopy: "Quit mid-block and restore the running or paused session from SQLite.",
   },
   {
-    index: "03",
-    title: "Read the ledger",
-    copy: "Completed focus and break sessions become a local record you can inspect by task or day.",
+    title: "Keep the record",
+    copy: "Focus and break sessions are written to a local ledger you can review by task or day.",
+    evidenceTitle: "Seven-day history",
+    evidenceCopy: "Review recent work without streaks, scores, or attention grades.",
   },
 ] as const;
 
@@ -50,32 +53,23 @@ const faq = [
   },
 ] as const;
 
-function ArrowIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 20 20" width="20" height="20">
-      <path d="M3 10h13M11 5l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
 function DownloadIcon() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 20 20" width="20" height="20">
-      <path d="M10 2v10m0 0 4-4m-4 4L6 8M3 16h14" fill="none" stroke="currentColor" strokeWidth="1.5" />
+    <svg aria-hidden="true" viewBox="0 0 20 20" width="18" height="18">
+      <path d="M10 2v10m0 0 4-4m-4 4L6 8M3 16h14" fill="none" stroke="currentColor" strokeWidth="1.6" />
     </svg>
   );
 }
 
-function DownloadActions({ compact = false }: { compact?: boolean }) {
+function DownloadActions() {
   return (
-    <div className={compact ? styles.downloadActionsCompact : styles.downloadActions}>
+    <div className={styles.downloadActions}>
       <a className={styles.primaryCta} href={DOWNLOAD_URL}>
         <DownloadIcon />
         <span>Download beta for Apple Silicon</span>
       </a>
       <a className={styles.checksumLink} href={CHECKSUM_URL}>
-        SHA-256 checksum
-        <ArrowIcon />
+        View SHA-256 checksum
       </a>
     </div>
   );
@@ -106,266 +100,89 @@ export default function Home() {
           <Image
             src="/focus-tracker-icon.png"
             alt=""
-            width={40}
-            height={40}
-            priority
+            width={36}
+            height={36}
+            loading="eager"
             className={styles.brandIcon}
           />
           <span>Focus Tracker</span>
         </a>
         <nav className={styles.nav} aria-label="Primary navigation">
-          <a href="#method">Method</a>
+          <a href="#method">How it works</a>
           <a href="#privacy">Privacy</a>
           <a href="#install">Install</a>
         </nav>
         <a className={styles.headerDownload} href={DOWNLOAD_URL}>
-          Download beta
-          <span aria-hidden="true">↓</span>
+          Download for Apple Silicon
         </a>
       </header>
 
       <main id="main-content">
         <section className={styles.hero} id="top" aria-labelledby="hero-title">
           <div className={styles.heroGrid}>
-            <div className={styles.heroCopy}>
-              <p className={styles.eyebrow}>
-                <span className={styles.liveDot} aria-hidden="true" />
-                Native focus instrument · macOS beta
-              </p>
-              <h1 id="hero-title">
-                Choose the work.
-                <br />
-                <em>Commit to the block.</em>
-              </h1>
-              <p className={styles.heroLead}>
-                Focus Tracker turns an open task into a deliberate 25, 50, or 90 minute
-                session—then writes the result to a private ledger on your Mac.
+            <h1 id="hero-title">
+              Choose the work.
+              <span>Commit to the block.</span>
+            </h1>
+            <div className={styles.heroIntro}>
+              <p>
+                Commit to 25, 50, or 90 minutes. Focus Tracker keeps the result in a private
+                local ledger.
               </p>
               <DownloadActions />
-              <p className={styles.buildNote}>
-                macOS 11+ · Apple Silicon · Beta is ad-hoc signed and not notarized
+              <p className={styles.platformNote}>
+                Apple Silicon · macOS 11+ · Ad-hoc signed, not notarized
               </p>
             </div>
-
-            <div className={styles.instrumentWrap} aria-label="Focus Gate timer illustration">
-              <div className={styles.instrumentGlow} aria-hidden="true" />
-              <div className={styles.instrument}>
-                <div className={styles.instrumentTopline}>
-                  <span>FOCUS GATE / ACTIVE</span>
-                  <span>LOCAL—01</span>
-                </div>
-
-                <div className={styles.activeTask}>
-                  <div>
-                    <span className={styles.instrumentLabel}>Committed task</span>
-                    <strong>Shape the project brief</strong>
-                  </div>
-                  <span className={styles.taskMarker}>01</span>
-                </div>
-
-                <div className={styles.gateAssembly} aria-hidden="true">
-                  <div className={styles.gateLabels}>
-                    <span>0</span>
-                    <span>25</span>
-                    <span>50</span>
-                  </div>
-                  <div className={styles.gateRail}>
-                    <span className={styles.gateFill} />
-                    <span className={styles.gateHandle} />
-                  </div>
-                </div>
-
-                <div className={styles.timerReadout}>
-                  <span className={styles.instrumentLabel}>Time remaining</span>
-                  <span className={styles.timerDigits}>24:36</span>
-                  <span className={styles.timerState}>Block 01 · running</span>
-                </div>
-
-                <div className={styles.durationRail}>
-                  <span className={styles.durationActive}>25 min</span>
-                  <span>50 min</span>
-                  <span>90 min</span>
-                </div>
-
-                <div className={styles.instrumentFooter}>
-                  <span>PAUSE</span>
-                  <span className={styles.instrumentRule} />
-                  <span>FINISH</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className={styles.signalStrip} aria-label="Focus Tracker workflow">
-            <span>Task selected</span>
-            <i aria-hidden="true" />
-            <span>Block committed</span>
-            <i aria-hidden="true" />
-            <span>Ledger recorded</span>
           </div>
 
           <figure className={styles.productProof}>
-            <div className={styles.productProofTopline}>
-              <span>THE NATIVE APPLICATION</span>
-              <span>RUNNING BLOCK · APPLE SILICON</span>
-            </div>
             <div className={styles.productScreenshot}>
               <Image
                 src="/product/focus-tracker-running.webp"
                 alt="Focus Tracker running a 25 minute block for Shape the project brief, with two other open tasks in the local ledger"
                 width={2360}
                 height={1520}
-                sizes="(max-width: 700px) calc(100vw - 28px), (max-width: 1280px) calc(100vw - 48px), 1240px"
+                sizes="(max-width: 700px) calc(100vw - 28px), (max-width: 1280px) calc(100vw - 56px), 1280px"
+                preload
               />
             </div>
             <figcaption>
-              <span>Captured from the real retained-canvas desktop app.</span>
-              <span>Isolated local dataset · no personal information</span>
+              <span>The native app during a running focus block.</span>
+              <span>Real interface, isolated local sample data.</span>
             </figcaption>
           </figure>
         </section>
 
-        <section className={styles.editorialIntro} aria-labelledby="intro-title">
-          <p className={styles.sectionNumber}>01 / CONSTRAINT</p>
-          <div>
-            <h2 id="intro-title">
-              A timer is easy.
-              <br />
-              <em>Choosing is the work.</em>
-            </h2>
-            <p>
-              The Focus Gate asks for a task before it starts the clock. That small constraint
-              turns a vague intention into a block with a name, a boundary, and a record.
-            </p>
-          </div>
-        </section>
-
         <section className={styles.methodSection} id="method" aria-labelledby="method-title">
-          <div className={styles.sectionHeading}>
-            <div>
-              <p className={styles.sectionNumber}>02 / THE METHOD</p>
-              <h2 id="method-title">Task → block → ledger.</h2>
-            </div>
+          <div className={styles.sectionIntro}>
+            <h2 id="method-title">Choosing is the work.</h2>
             <p>
-              One narrow loop, built to make commitment visible without turning your day into
-              a dashboard.
+              A timer cannot decide what deserves your next block. Focus Tracker gives that
+              decision a task, a boundary, and a local record.
             </p>
           </div>
 
           <ol className={styles.workflowList}>
             {workflow.map((step) => (
-              <li key={step.index}>
-                <span className={styles.workflowIndex}>{step.index}</span>
-                <div className={styles.workflowGlyph} aria-hidden="true">
-                  <span />
-                </div>
+              <li key={step.title}>
                 <h3>{step.title}</h3>
                 <p>{step.copy}</p>
+                <div className={styles.workflowEvidence}>
+                  <strong>{step.evidenceTitle}</strong>
+                  <p>{step.evidenceCopy}</p>
+                </div>
               </li>
             ))}
           </ol>
         </section>
 
-        <section className={styles.featuresSection} aria-labelledby="features-title">
-          <div className={styles.sectionHeading}>
-            <div>
-              <p className={styles.sectionNumber}>03 / INSTRUMENTS</p>
-              <h2 id="features-title">Present when you need it.</h2>
-            </div>
-            <p>
-              The main ledger, a compact controller, and durable recovery all work from the
-              same local state.
-            </p>
-          </div>
-
-          <div className={styles.featureGrid}>
-            <article className={`${styles.feature} ${styles.quickFeature}`}>
-              <div className={styles.featureMeta}>
-                <span>⌘⇧F</span>
-                <span>COMPACT CONTROL</span>
-              </div>
-              <h3>Quick Focus</h3>
-              <p>
-                Open a compact companion from the menu bar or keyboard. Select work and
-                control the same running block without rebuilding context.
-              </p>
-              <div className={styles.quickMock} aria-hidden="true">
-                <div className={styles.quickChrome}>
-                  <span />
-                  <span>QUICK FOCUS</span>
-                  <span>×</span>
-                </div>
-                <div className={styles.quickTask}>Shape the project brief</div>
-                <div className={styles.quickTime}>24:36</div>
-                <div className={styles.quickControls}>
-                  <span>PAUSE</span>
-                  <span>FINISH</span>
-                </div>
-              </div>
-            </article>
-
-            <article className={`${styles.feature} ${styles.recoveryFeature}`}>
-              <div className={styles.featureMeta}>
-                <span>R—01</span>
-                <span>DURABLE STATE</span>
-              </div>
-              <h3>Leave. Return. Continue.</h3>
-              <p>
-                Quit during a running or paused session and Focus Tracker recovers the block
-                from SQLite when you reopen it.
-              </p>
-              <div className={styles.recoveryDial} aria-hidden="true">
-                <span className={styles.recoveryOrbit} />
-                <span className={styles.recoveryCore}>R</span>
-                <span className={styles.recoveryTick}>SESSION RESTORED</span>
-              </div>
-            </article>
-
-            <article className={`${styles.feature} ${styles.historyFeature}`}>
-              <div className={styles.historyCopy}>
-                <div className={styles.featureMeta}>
-                  <span>L—07</span>
-                  <span>LOCAL HISTORY</span>
-                </div>
-                <h3>Seven days, in context.</h3>
-                <p>
-                  Review recent focus and break sessions by day. The ledger shows what
-                  happened; it does not grade your attention.
-                </p>
-              </div>
-              <div className={styles.historyChart} aria-label="Illustration of a seven-day focus history">
-                {[
-                  ["M", 44],
-                  ["T", 72],
-                  ["W", 36],
-                  ["T", 88],
-                  ["F", 64],
-                  ["S", 28],
-                  ["S", 52],
-                ].map(([day, value], index) => (
-                  <div className={styles.chartDay} key={`${day}-${index}`}>
-                    <div className={styles.chartTrack}>
-                      <span style={{ height: `${value}%` }} />
-                    </div>
-                    <span>{day}</span>
-                  </div>
-                ))}
-              </div>
-            </article>
-          </div>
-        </section>
-
         <section className={styles.privacySection} id="privacy" aria-labelledby="privacy-title">
-          <div className={styles.privacyGraphic} aria-hidden="true">
-            <div className={styles.storagePlate}>
-              <span className={styles.storageTop}>LOCAL / SQLITE</span>
-              <span className={styles.storagePulse} />
-              <span className={styles.storagePath}>focus.sqlite3</span>
-            </div>
-          </div>
-          <div className={styles.privacyCopy}>
-            <p className={styles.sectionNumber}>04 / PRIVATE BY ARCHITECTURE</p>
+          <div>
+            <p className={styles.kicker}>Private by architecture</p>
             <h2 id="privacy-title">Your focus history stays on this Mac.</h2>
+          </div>
+          <div className={styles.privacyDetail}>
             <p>
               Tasks, preferences, and sessions are persisted in a local SQLite database.
               Focus Tracker has no account system and no cloud sync.
@@ -380,7 +197,7 @@ export default function Home() {
                 <dd>Not required</dd>
               </div>
               <div>
-                <dt>Cloud</dt>
+                <dt>Cloud sync</dt>
                 <dd>None</dd>
               </div>
             </dl>
@@ -388,94 +205,65 @@ export default function Home() {
         </section>
 
         <section className={styles.installSection} id="install" aria-labelledby="install-title">
-          <div className={styles.sectionHeading}>
-            <div>
-              <p className={styles.sectionNumber}>05 / INSTALL</p>
-              <h2 id="install-title">Know what you are opening.</h2>
-            </div>
+          <div className={styles.installIntro}>
+            <h2 id="install-title">Install the macOS beta.</h2>
             <p>
-              This is an early public beta. The build is ad-hoc signed, not Developer ID
-              signed, and not notarized by Apple.
+              This build is ad-hoc signed, not Developer ID signed, and not notarized by
+              Apple. macOS will warn you before the first launch.
             </p>
+            <dl className={styles.requirements}>
+              <div>
+                <dt>System</dt>
+                <dd>macOS 11 or later</dd>
+              </div>
+              <div>
+                <dt>Processor</dt>
+                <dd>Apple Silicon</dd>
+              </div>
+              <div>
+                <dt>Format</dt>
+                <dd>DMG beta</dd>
+              </div>
+            </dl>
+            <DownloadActions />
           </div>
 
-          <div className={styles.installGrid}>
-            <div className={styles.requirementsPanel}>
-              <p className={styles.panelLabel}>SYSTEM REQUIREMENTS</p>
-              <dl>
-                <div>
-                  <dt>Operating system</dt>
-                  <dd>macOS 11 or later</dd>
-                </div>
-                <div>
-                  <dt>Processor</dt>
-                  <dd>Apple Silicon</dd>
-                </div>
-                <div>
-                  <dt>Distribution</dt>
-                  <dd>DMG · beta</dd>
-                </div>
-                <div>
-                  <dt>Signature</dt>
-                  <dd>Ad-hoc · not notarized</dd>
-                </div>
-              </dl>
-              <DownloadActions compact />
-            </div>
-
-            <ol className={styles.installSteps}>
+          <div className={styles.installGuide}>
+            <h3>Install and verify</h3>
+            <ol>
               <li>
-                <span>01</span>
-                <div>
-                  <h3>Download and verify</h3>
-                  <p>
-                    Download the DMG from GitHub and compare it with the published{" "}
-                    <a href={CHECKSUM_URL}>SHA-256 checksum</a>.
-                  </p>
-                </div>
+                <strong>Verify the download.</strong>
+                <p>
+                  Compare the DMG with the published <a href={CHECKSUM_URL}>SHA-256 checksum</a>.
+                </p>
               </li>
               <li>
-                <span>02</span>
-                <div>
-                  <h3>Move it to Applications</h3>
-                  <p>Open the DMG, then drag Focus Tracker into your Applications folder.</p>
-                </div>
+                <strong>Move it to Applications.</strong>
+                <p>Open the DMG and drag Focus Tracker into your Applications folder.</p>
               </li>
               <li>
-                <span>03</span>
-                <div>
-                  <h3>Review the Gatekeeper warning</h3>
-                  <p>
-                    Try opening the app once. If you trust the release, go to System Settings
-                    → Privacy &amp; Security → Open Anyway. Read{" "}
-                    <a href={APPLE_GATEKEEPER_URL} target="_blank" rel="noreferrer">
-                      Apple&apos;s official guidance
-                    </a>{" "}
-                    before overriding the warning.
-                  </p>
-                </div>
+                <strong>Review the macOS warning.</strong>
+                <p>
+                  If you trust the release, follow{" "}
+                  <a href={APPLE_GATEKEEPER_URL} target="_blank" rel="noreferrer">
+                    Apple&apos;s official guidance
+                  </a>{" "}
+                  to open it. Otherwise, do not override Gatekeeper.
+                </p>
               </li>
             </ol>
-          </div>
-
-          <aside className={styles.warning} aria-label="Beta security notice">
-            <span className={styles.warningMark} aria-hidden="true">!</span>
-            <p>
-              <strong>Security notice.</strong> Apple warns that overriding security settings
-              for unnotarized software carries risk. Proceed only if you trust the source and
-              checksum; otherwise, do not open the beta.
+            <p className={styles.securityNotice}>
+              Overriding macOS security settings for unnotarized software carries risk. Only
+              proceed when you trust the source and the checksum matches.
             </p>
-          </aside>
+          </div>
         </section>
 
         <section className={styles.faqSection} aria-labelledby="faq-title">
-          <div className={styles.faqIntro}>
-            <p className={styles.sectionNumber}>06 / FIELD NOTES</p>
-            <h2 id="faq-title">Questions before the first block.</h2>
-          </div>
+          <h2 id="faq-title">Before your first block.</h2>
           <div className={styles.faqList}>
-            {faq.map((item, index) => (
-              <details key={item.question} open={index === 0}>
+            {faq.map((item) => (
+              <details key={item.question}>
                 <summary>
                   <span>{item.question}</span>
                   <span className={styles.faqToggle} aria-hidden="true" />
@@ -485,28 +273,18 @@ export default function Home() {
             ))}
           </div>
         </section>
-
-        <section className={styles.finalCta} aria-labelledby="final-title">
-          <div className={styles.finalSignal} aria-hidden="true">
-            <span />
-          </div>
-          <p className={styles.sectionNumber}>READY / WHEN YOU ARE</p>
-          <h2 id="final-title">One task. One block. A record you own.</h2>
-          <p>Native on Apple Silicon. Local SQLite. No account and no cloud.</p>
-          <DownloadActions />
-        </section>
       </main>
 
       <footer className={styles.footer}>
         <div className={styles.footerBrand}>
-          <Image src="/focus-tracker-icon.png" alt="" width={32} height={32} />
+          <Image src="/focus-tracker-icon.png" alt="" width={28} height={28} />
           <span>Focus Tracker</span>
         </div>
         <p>Built for deliberate work on macOS.</p>
         <div className={styles.footerLinks}>
           <a href={REPOSITORY_URL} target="_blank" rel="noreferrer">GitHub</a>
           <a href={CHECKSUM_URL}>Checksum</a>
-          <a href="#top">Back to top ↑</a>
+          <a href="#top">Back to top</a>
         </div>
       </footer>
 
