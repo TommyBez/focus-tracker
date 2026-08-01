@@ -176,7 +176,7 @@ export default function Home() {
         <section className={styles.privacySection} id="privacy" aria-labelledby="privacy-title">
           <div>
             <p className={styles.kicker}>Private by architecture</p>
-            <h2 id="privacy-title">Your focus history stays on this Mac.</h2>
+            <h2 id="privacy-title">Your focus history stays on your Mac.</h2>
           </div>
           <div className={styles.privacyDetail}>
             <p>
