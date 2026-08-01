@@ -217,16 +217,6 @@
   border-radius: 12px;
 }
 
-.productProof figcaption {
-  min-height: 50px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  color: var(--ink-muted);
-  font-size: 11px;
-}
-
 .sectionIntro h2,
 .privacySection h2,
 .installIntro h2,
@@ -658,15 +648,6 @@
 
   .productScreenshot img {
     border-radius: 6px;
-  }
-
-  .productProof figcaption {
-    min-height: 68px;
-    padding: 12px 0;
-    align-items: flex-start;
-    flex-direction: column;
-    justify-content: center;
-    gap: 2px;
   }
 
   .sectionIntro h2,

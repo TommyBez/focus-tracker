@@ -147,10 +147,6 @@ export default function Home() {
                 preload
               />
             </div>
-            <figcaption>
-              <span>The native app during a running focus block.</span>
-              <span>Real interface, isolated local sample data.</span>
-            </figcaption>
           </figure>
         </section>
 
