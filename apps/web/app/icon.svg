@@ -1,15 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
-    <linearGradient id="case" x1="0" y1="0" x2="1" y2="1">
-      <stop stop-color="#24272d"/>
-      <stop offset="1" stop-color="#111319"/>
+    <linearGradient id="tile" x1="12" y1="4" x2="52" y2="62" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fffdf8"/>
+      <stop offset="1" stop-color="#e7e3d9"/>
     </linearGradient>
-    <filter id="glow" x="-50%" y="-200%" width="200%" height="500%">
-      <feGaussianBlur stdDeviation="2"/>
-    </filter>
+    <linearGradient id="body" x1="18" y1="11" x2="45" y2="49" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4569e7"/>
+      <stop offset="0.62" stop-color="#3156d9"/>
+      <stop offset="1" stop-color="#2046ad"/>
+    </linearGradient>
   </defs>
-  <rect x="3" y="3" width="58" height="58" rx="14" fill="url(#case)" stroke="#434750" stroke-width="2"/>
-  <path d="M8 33h48" stroke="#3156d9" stroke-width="4" opacity=".75" filter="url(#glow)"/>
-  <path d="M7 32h50" stroke="#5f7eff" stroke-width="2"/>
-  <rect x="45" y="27" width="7" height="10" rx="1" fill="#ebe8df"/>
+  <rect x="2" y="2" width="60" height="60" rx="15" fill="url(#tile)" stroke="#111218" stroke-opacity=".1"/>
+  <rect x="27" y="41" width="10" height="17" rx="2.5" fill="#f2f1ec" stroke="#111218" stroke-opacity=".16"/>
+  <rect x="30.5" y="50.5" width="3" height="3" rx=".5" fill="#3156d9"/>
+  <rect x="11" y="10" width="42" height="39" rx="10" fill="url(#body)"/>
+  <path d="M11 41c7 5 35 5 42 0v3c0 3-2 5-5 5H16c-3 0-5-2-5-5Z" fill="#193983" opacity=".58"/>
+  <circle cx="32" cy="28" r="13.5" fill="#111218" opacity=".24"/>
+  <circle cx="32" cy="27" r="12.5" fill="#f2f1ec"/>
+  <path d="M32 27V14.5A12.5 12.5 0 0 1 42.2 19.8Z" fill="#3156d9"/>
+  <path d="M32 27 42.2 19.8" fill="none" stroke="#111218" stroke-width="2.3" stroke-linecap="round"/>
+  <circle cx="32" cy="27" r="2.2" fill="#111218"/>
 </svg>
