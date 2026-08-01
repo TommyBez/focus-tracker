@@ -783,10 +783,13 @@ pub const SqliteExtension = struct {
     }
 
     fn todayFocusMs(self: *SqliteExtension, now_ms: u64) !u64 {
+        // Keep ended_ms bare so focus_sessions_history can bound the scan.
+        // Applying date() to the column forces SQLite to inspect all history.
         const sql =
             \\SELECT COALESCE(SUM(focused_ms),0) FROM focus_sessions
             \\WHERE mode=0 AND state=2
-            \\AND date(ended_ms/1000,'unixepoch','localtime')=date(?1/1000,'unixepoch','localtime');
+            \\AND ended_ms>=CAST(strftime('%s',date(?1/1000,'unixepoch','localtime'),'utc') AS INTEGER)*1000
+            \\AND ended_ms<CAST(strftime('%s',date(?1/1000,'unixepoch','localtime','+1 day'),'utc') AS INTEGER)*1000;
         ;
         return self.scalarU64At(sql, now_ms);
     }
@@ -795,7 +798,8 @@ pub const SqliteExtension = struct {
         const sql =
             \\SELECT COUNT(*) FROM focus_sessions
             \\WHERE mode=0 AND state=2
-            \\AND date(ended_ms/1000,'unixepoch','localtime')=date(?1/1000,'unixepoch','localtime');
+            \\AND ended_ms>=CAST(strftime('%s',date(?1/1000,'unixepoch','localtime'),'utc') AS INTEGER)*1000
+            \\AND ended_ms<CAST(strftime('%s',date(?1/1000,'unixepoch','localtime','+1 day'),'utc') AS INTEGER)*1000;
         ;
         return self.scalarU32At(sql, now_ms);
     }
@@ -829,7 +833,8 @@ pub const SqliteExtension = struct {
         const statement = try self.prepare(
             \\SELECT COALESCE(SUM(focused_ms),0) FROM focus_sessions
             \\WHERE mode=0 AND state=2
-            \\AND date(ended_ms/1000,'unixepoch','localtime')=date(?1/1000,'unixepoch','localtime',?2);
+            \\AND ended_ms>=CAST(strftime('%s',date(?1/1000,'unixepoch','localtime',?2),'utc') AS INTEGER)*1000
+            \\AND ended_ms<CAST(strftime('%s',date(?1/1000,'unixepoch','localtime',?2,'+1 day'),'utc') AS INTEGER)*1000;
         );
         defer _ = c.sqlite3_finalize(statement);
         try self.bindU64(statement, 1, now_ms);

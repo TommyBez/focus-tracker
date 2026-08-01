@@ -43,16 +43,18 @@ Options:
   --app PATH              Source .app bundle.
   --output PATH           Final .dmg path (must stay inside this repository).
   --background PATH       660x430 pt PNG Finder background (@1x or @2x).
-  --no-background         Build without a background image.
+  --no-background         Build without background or Finder layout metadata.
   --volume-icon PATH      Optional .icns volume icon.
   --no-volume-icon        Build without a custom volume icon.
-  --volume-name NAME      Must match the layout template: Focus Tracker.
+  --volume-name NAME      Volume name (the background layout requires Focus Tracker).
   -h, --help              Show this help.
 
 The default source is zig-out/package/focus-tracker.app. If present,
 packaging/macos/dmg-background.png and packaging/macos/dmg-volume.icns are used automatically.
-The version-controlled packaging/macos/dmg-layout.DS_Store supplies the Finder
-window, icon positions, and background reference without launching Finder.
+With the default background, packaging/macos/dmg-layout.DS_Store supplies the
+Finder window, icon positions, and background reference without launching Finder.
+--no-background omits both .background and .DS_Store so no stale background
+reference can remain in the image.
 The output defaults to zig-out/release/Focus-Tracker-<version>-macOS-<arch>.dmg.
 EOF
 }
@@ -94,13 +96,14 @@ assert_exact_hidden_root_payload() {
     die "$phase image contains unexpected hidden root payload"
   fi
 
-  [[ -f "$root/.DS_Store" ]] || die "$phase image is missing .DS_Store"
-  cmp -s "$LAYOUT_TEMPLATE" "$root/.DS_Store" || \
-    die "$phase image .DS_Store differs from the version-controlled layout template"
   if [[ "$INCLUDE_BACKGROUND" -eq 1 ]]; then
+    [[ -f "$root/.DS_Store" ]] || die "$phase image is missing .DS_Store"
+    cmp -s "$LAYOUT_TEMPLATE" "$root/.DS_Store" || \
+      die "$phase image .DS_Store differs from the version-controlled layout template"
     [[ -d "$root/.background" ]] || die "$phase image is missing .background"
   else
     [[ ! -e "$root/.background" && ! -L "$root/.background" ]] || die "$phase image unexpectedly contains .background"
+    [[ ! -e "$root/.DS_Store" && ! -L "$root/.DS_Store" ]] || die "$phase image unexpectedly contains Finder layout metadata"
   fi
   if [[ "$INCLUDE_VOLUME_ICON" -eq 1 ]]; then
     [[ -f "$root/.VolumeIcon.icns" ]] || die "$phase image is missing .VolumeIcon.icns"
@@ -250,16 +253,6 @@ for tool in awk cmp codesign ditto du file find GetFileInfo grep hdiutil lipo re
 done
 [[ -x "$PLIST_BUDDY" ]] || die "required command not found: $PLIST_BUDDY"
 
-[[ -f "$LAYOUT_TEMPLATE" && ! -L "$LAYOUT_TEMPLATE" ]] || \
-  die "version-controlled Finder layout template is missing or invalid: $LAYOUT_TEMPLATE"
-file "$LAYOUT_TEMPLATE" | grep -q 'Apple Desktop Services Store' || \
-  die "Finder layout template is not a valid .DS_Store file"
-LAYOUT_STRINGS="$(strings "$LAYOUT_TEMPLATE")"
-for marker in 'Focus Tracker' '.background' 'dmg-background.png'; do
-  grep -Fqx "$marker" <<< "$LAYOUT_STRINGS" || \
-    die "Finder layout template is missing expected marker: $marker"
-done
-
 APP_SOURCE="$(resolve_existing_path "$APP_SOURCE")"
 [[ -d "$APP_SOURCE" ]] || die "source app is not a directory: $APP_SOURCE"
 [[ "$APP_SOURCE" == *.app ]] || die "source must be an .app bundle: $APP_SOURCE"
@@ -312,9 +305,6 @@ OUTPUT_DMG="$OUTPUT_PARENT/$(basename -- "$OUTPUT_DMG")"
 [[ -n "$VOLUME_NAME" ]] || die "volume name cannot be empty"
 [[ "$VOLUME_NAME" != */* ]] || die "volume name cannot contain a slash"
 [[ ${#VOLUME_NAME} -le 27 ]] || die "volume name must be 27 characters or fewer for HFS+ compatibility"
-[[ "$VOLUME_NAME" == "Focus Tracker" ]] || \
-  die "the version-controlled Finder layout template requires volume name 'Focus Tracker'"
-
 INCLUDE_BACKGROUND=0
 if [[ -n "$BACKGROUND_IMAGE" ]]; then
   if [[ -e "$BACKGROUND_IMAGE" ]]; then
@@ -336,6 +326,20 @@ if [[ -n "$BACKGROUND_IMAGE" ]]; then
   else
     BACKGROUND_IMAGE=""
   fi
+fi
+
+if [[ "$INCLUDE_BACKGROUND" -eq 1 ]]; then
+  [[ -f "$LAYOUT_TEMPLATE" && ! -L "$LAYOUT_TEMPLATE" ]] || \
+    die "version-controlled Finder layout template is missing or invalid: $LAYOUT_TEMPLATE"
+  file "$LAYOUT_TEMPLATE" | grep -q 'Apple Desktop Services Store' || \
+    die "Finder layout template is not a valid .DS_Store file"
+  LAYOUT_STRINGS="$(strings "$LAYOUT_TEMPLATE")"
+  for marker in 'Focus Tracker' '.background' 'dmg-background.png'; do
+    grep -Fqx "$marker" <<< "$LAYOUT_STRINGS" || \
+      die "Finder layout template is missing expected marker: $marker"
+  done
+  [[ "$VOLUME_NAME" == "Focus Tracker" ]] || \
+    die "the version-controlled Finder layout template requires volume name 'Focus Tracker'"
 fi
 
 INCLUDE_VOLUME_ICON=0
@@ -415,12 +419,16 @@ IMAGE_ATTACHED=1
 mkdir -p -- "$MOUNT_POINT/.fseventsd"
 touch "$MOUNT_POINT/.fseventsd/no_log" "$MOUNT_POINT/.metadata_never_index"
 
-note "Installing version-controlled Finder layout without a GUI session"
-ditto --norsrc --noextattr --noqtn --noacl \
-  "$LAYOUT_TEMPLATE" \
-  "$MOUNT_POINT/.DS_Store"
-cmp -s "$LAYOUT_TEMPLATE" "$MOUNT_POINT/.DS_Store" || \
-  die "mounted Finder layout does not match the version-controlled template"
+if [[ "$INCLUDE_BACKGROUND" -eq 1 ]]; then
+  note "Installing version-controlled Finder layout without a GUI session"
+  ditto --norsrc --noextattr --noqtn --noacl \
+    "$LAYOUT_TEMPLATE" \
+    "$MOUNT_POINT/.DS_Store"
+  cmp -s "$LAYOUT_TEMPLATE" "$MOUNT_POINT/.DS_Store" || \
+    die "mounted Finder layout does not match the version-controlled template"
+else
+  note "Keeping the image free of Finder background and layout metadata"
+fi
 
 if [[ -d "$MOUNT_POINT/.background" ]]; then
   SetFile -a V "$MOUNT_POINT/.background"
@@ -483,6 +491,8 @@ note "Running independent pre-publication verification"
 VERIFY_ARGS=(--source-app "$APP_SOURCE" --volume-name "$VOLUME_NAME" --skip-checksum)
 if [[ "$INCLUDE_BACKGROUND" -eq 1 ]]; then
   VERIFY_ARGS+=(--expect-background)
+else
+  VERIFY_ARGS+=(--expect-no-background)
 fi
 if [[ "$INCLUDE_VOLUME_ICON" -eq 1 ]]; then
   VERIFY_ARGS+=(--expect-volume-icon)

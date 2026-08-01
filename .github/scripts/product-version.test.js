@@ -6,6 +6,7 @@ const test = require("node:test");
 const {
   assertNativeSdkHashPreserved,
   bumpPatch,
+  compareVersions,
   extractNativeSdkHash,
   isProductFileChange,
   isProductPath,
@@ -53,6 +54,15 @@ test("bumps exactly one patch component", () => {
   assert.throws(() => bumpPatch("1.2"), /stable semantic version/);
 });
 
+test("compares stable semantic versions component by component", () => {
+  assert.equal(compareVersions("1.2.3", "1.2.3"), 0);
+  assert.equal(compareVersions("1.2.4", "1.2.3"), 1);
+  assert.equal(compareVersions("1.3.0", "1.2.99"), 1);
+  assert.equal(compareVersions("2.0.0", "1.99.99"), 1);
+  assert.equal(compareVersions("0.9.9", "1.0.0"), -1);
+  assert.throws(() => compareVersions("1.2", "1.2.0"), /stable semantic version/);
+});
+
 test("replaces the direct version without touching nested versions", () => {
   const updated = replaceTopLevelVersion(APP_ZON, "1.2.4");
   assert.equal(readTopLevelVersion(updated), "1.2.4");
@@ -96,10 +106,23 @@ test("extracts and preserves the pinned native_sdk-0.1.0 content hash", () => {
 
   const updated = replaceTopLevelVersion(BUILD_ZON, "1.2.4");
   assert.equal(assertNativeSdkHashPreserved(BUILD_ZON, updated), expected);
-  assert.match(updated, new RegExp(expected.replaceAll("-", "\\-")));
+  assert.ok(updated.includes(expected));
 
   assert.throws(
     () => assertNativeSdkHashPreserved(BUILD_ZON, updated.replace(expected, `${expected}changed`)),
     /content hash changed/,
+  );
+});
+
+test("accepts any stable native_sdk package version while rejecting ambiguous metadata", () => {
+  const newerHash = "native_sdk-12.34.5-hzDzQp9I2gFMHD_R41bQ-uw8x1UlqXtr5Dqp_DP_2bxC";
+  assert.equal(extractNativeSdkHash(BUILD_ZON.replace(/native_sdk-0\.1\.0-[A-Za-z0-9_-]+/, newerHash)), newerHash);
+
+  assert.throws(() => readTopLevelVersion('.{\n    .version = "1.2.3,\n}\n'), /unterminated string/);
+  assert.throws(() => readTopLevelVersion('.{\n    .version = "1.2.3",\n'), /unbalanced braces/);
+  assert.throws(() => extractNativeSdkHash(APP_ZON), /exactly one native_sdk dependency block/);
+  assert.throws(
+    () => extractNativeSdkHash(BUILD_ZON.replace("    },\n}\n", `    },\n        .native_sdk = .{\n            .hash = "${newerHash}",\n        },\n    },\n}\n`)),
+    /exactly one native_sdk dependency block/,
   );
 });

@@ -183,11 +183,14 @@ zig-out/release/Focus-Tracker-<version>-macOS-<arch>.dmg.sha256
 
 The image contains only `Focus Tracker.app` and an `Applications` link in its
 visible root. Packaging is headless: it mounts the writable image with
-`-nobrowse` in a temporary directory and copies the version-controlled
-`packaging/macos/dmg-layout.DS_Store`. It never launches Finder or AppleScript
-and does not require an unlocked desktop session. The template preserves the
-window presentation, background reference, and app/Applications icon positions;
-verification requires the mounted `.DS_Store` to match it byte-for-byte.
+`-nobrowse` in a temporary directory and, with the default background, copies
+the version-controlled `packaging/macos/dmg-layout.DS_Store`. It never launches
+Finder or AppleScript and does not require an unlocked desktop session. The
+template preserves the window presentation, background reference, and
+app/Applications icon positions; verification requires the mounted `.DS_Store`
+to match it byte-for-byte. `package:dmg --no-background` instead omits both
+`.background` and `.DS_Store`; `--expect-no-background` verifies that neither
+stale background content nor metadata remains.
 
 The remaining packaging-only assets are the 2× Cobalt Ledger background and
 branded volume icon under `packaging/macos`. They are excluded from the runtime

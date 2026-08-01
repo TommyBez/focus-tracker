@@ -1748,7 +1748,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       return [model, Cmd.showWindow("settings")];
     case "close_settings":
       return { ...model, settingsWindowOpen: false };
-    case "open_quick":
+    case "open_quick": {
       if (model.loadState !== "ready") return model;
       // A recorded-focus confirmation can move between the main instrument
       // and Quick Focus. True modal dialogs stay on their current surface.
@@ -1784,6 +1784,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
         },
         Cmd.delay("quick-activate", 1, "raise_quick"),
       ];
+    }
     case "raise_quick":
       if (!model.quickWindowOpen) return model;
       return [model, Cmd.showWindow("quick")];

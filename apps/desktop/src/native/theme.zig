@@ -90,9 +90,11 @@ pub fn tokens(options: Options) canvas.DesignTokens {
         // Resolve control colors only after the semantic accent bundle so
         // progress and focus visuals follow the caller's live accent.
         const colors = resolved.colors;
-        const field_border = withAlpha(colors.text, switch (scheme) {
-            .light => 0.18,
-            .dark => 0.24,
+        const control_border = withAlpha(colors.text, switch (scheme) {
+            // These floors composite to at least 3:1 against the actual house
+            // backgrounds; the quieter colors.border remains decorative only.
+            .light => 0.44,
+            .dark => 0.36,
         });
         const progress_track = mix(colors.background, colors.text, switch (scheme) {
             .light => 0.07,
@@ -113,13 +115,13 @@ pub fn tokens(options: Options) canvas.DesignTokens {
                 .button_destructive = .{ .radius = 6 },
                 .toggle_button = .{ .radius = 6 },
                 .tabs = .{
-                    .border = colors.border,
+                    .border = control_border,
                     .radius = 8,
                     .stroke_width = 1,
                 },
                 .text_field = .{
                     .background = colors.background,
-                    .border = field_border,
+                    .border = control_border,
                     .radius = 5,
                     .stroke_width = 1,
                 },
@@ -127,7 +129,7 @@ pub fn tokens(options: Options) canvas.DesignTokens {
                     .background = colors.background,
                     .hover_background = colors.surface_subtle,
                     .border = withAlpha(colors.text, switch (scheme) {
-                        .light => 0.40,
+                        .light => 0.44,
                         .dark => 0.50,
                     }),
                     .radius = 3,
@@ -240,12 +242,16 @@ test "standard appearance applies accent and native control refinements" {
         actual.controls.toggle_button.radius.?,
     }) |radius| try std.testing.expectEqual(@as(f32, 6), radius);
     try std.testing.expectEqual(@as(f32, 8), actual.controls.tabs.radius.?);
-    try std.testing.expectEqualDeep(actual.colors.border, actual.controls.tabs.border.?);
+    try std.testing.expectEqual(@as(f32, 0.44), actual.controls.tabs.border.?.a);
+    try std.testing.expectEqual(@as(f32, 0.36), dark.controls.tabs.border.?.a);
     try std.testing.expectEqual(@as(f32, 1), actual.controls.tabs.stroke_width.?);
     try std.testing.expectEqual(@as(f32, 5), actual.controls.text_field.radius.?);
-    try std.testing.expectEqual(@as(f32, 0.18), actual.controls.text_field.border.?.a);
+    try std.testing.expectEqual(@as(f32, 0.44), actual.controls.text_field.border.?.a);
+    try std.testing.expectEqual(@as(f32, 0.36), dark.controls.text_field.border.?.a);
     try std.testing.expectEqual(@as(f32, 1), actual.controls.text_field.stroke_width.?);
     try std.testing.expectEqual(@as(f32, 3), actual.controls.checkbox.radius.?);
+    try std.testing.expectEqual(@as(f32, 0.44), actual.controls.checkbox.border.?.a);
+    try std.testing.expectEqual(@as(f32, 0.50), dark.controls.checkbox.border.?.a);
     try std.testing.expectEqual(@as(f32, 1), actual.controls.checkbox.stroke_width.?);
     try std.testing.expectEqualDeep(
         mix(actual.colors.background, actual.colors.text, 0.07),

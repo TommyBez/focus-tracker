@@ -591,14 +591,7 @@ export function encodeTaskState(revision: number, nowMs: number, taskId: number,
 // that the row is still archived and retains its authoritative completion
 // timestamp when restoring a completed task.
 export function encodeTaskUndoArchive(revision: number, nowMs: number, taskId: number, state: TaskState): Bytes {
-  const out = new Uint8Array(33);
-  out.set(mutationPrefix(revision, nowMs), 0);
-  out.set(encodeU64Part(taskId), 24);
-  let stateWire = 0;
-  if (state === "completed") stateWire = 1;
-  if (state === "archived") stateWire = 2;
-  out[32] = stateWire;
-  return out;
+  return encodeTaskState(revision, nowMs, taskId, state);
 }
 
 export function encodeTaskPurge(revision: number, nowMs: number, taskId: number): Bytes {

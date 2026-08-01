@@ -1,5 +1,8 @@
 "use strict";
 
+// Keep this helper dependency-free: pull_request_target evaluates the trusted
+// base-branch copy with require() disabled before it inspects untrusted PR data.
+
 const PRODUCT_FILES = new Set([
   "apps/desktop/app.zon",
   "apps/desktop/package.json",
@@ -14,6 +17,7 @@ const PRODUCT_DIRECTORIES = [
 ];
 
 const VERSION_PATTERN = "(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)";
+const NATIVE_SDK_HASH_PATTERN = `native_sdk-${VERSION_PATTERN}-[A-Za-z0-9_-]+`;
 
 function scanLineBraces(line, initialDepth) {
   let depth = initialDepth;
@@ -146,6 +150,17 @@ function bumpPatch(version) {
   return `${parsed.major}.${parsed.minor}.${parsed.patch + 1}`;
 }
 
+function compareVersions(left, right) {
+  const leftVersion = parseVersion(left, "left version");
+  const rightVersion = parseVersion(right, "right version");
+
+  for (const component of ["major", "minor", "patch"]) {
+    if (leftVersion[component] < rightVersion[component]) return -1;
+    if (leftVersion[component] > rightVersion[component]) return 1;
+  }
+  return 0;
+}
+
 function isProductPath(path) {
   if (typeof path !== "string" || path === "" || path.includes("\\")) {
     return false;
@@ -223,7 +238,7 @@ function extractNativeSdkHash(source, label = "build.zig.zon") {
   const blockStart = blockMatches[0].index + blockMatches[0][0].lastIndexOf("{");
   const blockEnd = findMatchingBrace(source, blockStart);
   const block = source.slice(blockStart, blockEnd + 1);
-  const hash = directStringField(block, "hash", "native_sdk-0\\.1\\.0-[A-Za-z0-9_-]+", `${label} native_sdk`)
+  const hash = directStringField(block, "hash", NATIVE_SDK_HASH_PATTERN, `${label} native_sdk`)
     .value;
 
   return hash;
@@ -241,6 +256,7 @@ function assertNativeSdkHashPreserved(before, after, label = "build.zig.zon") {
 module.exports = {
   assertNativeSdkHashPreserved,
   bumpPatch,
+  compareVersions,
   extractNativeSdkHash,
   isProductFileChange,
   isProductPath,

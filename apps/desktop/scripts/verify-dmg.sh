@@ -15,6 +15,7 @@ SOURCE_APP="$REPO_ROOT/zig-out/package/focus-tracker.app"
 EXPECTED_APP_NAME="Focus Tracker.app"
 EXPECTED_VOLUME_NAME="Focus Tracker"
 EXPECT_BACKGROUND=0
+EXPECT_NO_BACKGROUND=0
 EXPECT_VOLUME_ICON=0
 VERIFY_CHECKSUM=1
 CHECKSUM_ONLY=0
@@ -34,10 +35,11 @@ Usage:
 Options:
   --source-app PATH       Compare metadata and architectures with this .app.
   --volume-name NAME      Expected mounted volume name (default: Focus Tracker).
-  --expect-background    Require the 660x430 pt Finder background and .DS_Store.
-  --expect-volume-icon   Require a hidden .VolumeIcon.icns.
-  --skip-checksum        Do not require PATH.dmg.sha256.
-  --checksum-only        Verify only the published SHA-256 sidecar.
+  --expect-background     Require the 660x430 pt Finder background and .DS_Store.
+  --expect-no-background  Require both .background and .DS_Store to be absent.
+  --expect-volume-icon    Require a hidden .VolumeIcon.icns.
+  --skip-checksum         Do not require PATH.dmg.sha256.
+  --checksum-only         Verify only the published SHA-256 sidecar.
   -h, --help             Show this help.
 EOF
 }
@@ -95,6 +97,10 @@ while [[ $# -gt 0 ]]; do
       EXPECT_BACKGROUND=1
       shift
       ;;
+    --expect-no-background)
+      EXPECT_NO_BACKGROUND=1
+      shift
+      ;;
     --volume-name)
       [[ $# -ge 2 ]] || die "--volume-name requires a value"
       EXPECTED_VOLUME_NAME="$2"
@@ -128,6 +134,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$DMG_PATH" ]] || die "a DMG path is required"
+[[ "$EXPECT_BACKGROUND" -eq 0 || "$EXPECT_NO_BACKGROUND" -eq 0 ]] || \
+  die "--expect-background and --expect-no-background are mutually exclusive"
 
 for tool in awk cmp codesign diskutil file GetFileInfo grep hdiutil lipo plutil readlink realpath shasum sips; do
   require_command "$tool"
@@ -172,10 +180,12 @@ SOURCE_BUNDLE_README="$SOURCE_APP/Contents/Resources/README.txt"
 grep -Fqx "$BUNDLE_README_LINE" "$SOURCE_BUNDLE_README" || \
   die "source app README does not contain the exact beta signing disclosure"
 pass "source app contains the exact beta signing disclosure"
-[[ -f "$LAYOUT_TEMPLATE" && ! -L "$LAYOUT_TEMPLATE" ]] || \
-  die "version-controlled Finder layout template is missing or invalid: $LAYOUT_TEMPLATE"
-file "$LAYOUT_TEMPLATE" | grep -q 'Apple Desktop Services Store' || \
-  die "Finder layout template is not a valid .DS_Store file"
+if [[ "$EXPECT_NO_BACKGROUND" -eq 0 ]]; then
+  [[ -f "$LAYOUT_TEMPLATE" && ! -L "$LAYOUT_TEMPLATE" ]] || \
+    die "version-controlled Finder layout template is missing or invalid: $LAYOUT_TEMPLATE"
+  file "$LAYOUT_TEMPLATE" | grep -q 'Apple Desktop Services Store' || \
+    die "Finder layout template is not a valid .DS_Store file"
+fi
 
 printf '  [check] UDIF structure\n'
 hdiutil verify "$DMG_PATH" >/dev/null
@@ -236,10 +246,18 @@ fi
 [[ ! -e "$MOUNT_POINT/.VolumeIcon.icns" || -f "$MOUNT_POINT/.VolumeIcon.icns" ]] || die ".VolumeIcon.icns is not a regular file"
 pass "hidden root payload is restricted to .background, .DS_Store, and .VolumeIcon.icns"
 
-[[ -f "$MOUNT_POINT/.DS_Store" ]] || die "mounted image is missing Finder .DS_Store layout metadata"
-cmp -s "$LAYOUT_TEMPLATE" "$MOUNT_POINT/.DS_Store" || \
-  die "mounted Finder layout differs from packaging/macos/dmg-layout.DS_Store"
-pass "Finder layout exactly matches the version-controlled headless template"
+if [[ "$EXPECT_NO_BACKGROUND" -eq 1 ]]; then
+  [[ ! -e "$MOUNT_POINT/.background" && ! -L "$MOUNT_POINT/.background" ]] || \
+    die "background-free image unexpectedly contains .background"
+  [[ ! -e "$MOUNT_POINT/.DS_Store" && ! -L "$MOUNT_POINT/.DS_Store" ]] || \
+    die "background-free image unexpectedly contains Finder layout metadata"
+  pass "background-free image contains neither .background nor .DS_Store"
+else
+  [[ -f "$MOUNT_POINT/.DS_Store" ]] || die "mounted image is missing Finder .DS_Store layout metadata"
+  cmp -s "$LAYOUT_TEMPLATE" "$MOUNT_POINT/.DS_Store" || \
+    die "mounted Finder layout differs from packaging/macos/dmg-layout.DS_Store"
+  pass "Finder layout exactly matches the version-controlled headless template"
+fi
 
 if [[ "$EXPECT_BACKGROUND" -eq 1 ]]; then
   MOUNTED_BACKGROUND="$MOUNT_POINT/.background/dmg-background.png"

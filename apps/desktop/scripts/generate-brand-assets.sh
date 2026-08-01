@@ -4,9 +4,10 @@ set -euo pipefail
 IFS=$'\n\t'
 umask 022
 
-readonly SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-readonly DESKTOP_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)"
-readonly REPO_ROOT="$(CDPATH= cd -- "$DESKTOP_ROOT/../.." && pwd -P)"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+DESKTOP_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)"
+REPO_ROOT="$(CDPATH= cd -- "$DESKTOP_ROOT/../.." && pwd -P)"
+readonly SCRIPT_DIR DESKTOP_ROOT REPO_ROOT
 readonly APP_ICON="$DESKTOP_ROOT/assets/icon.png"
 readonly TRAY_SOURCE="$DESKTOP_ROOT/assets/tray-template.svg"
 readonly TRAY_PNG="$DESKTOP_ROOT/assets/tray-template.png"

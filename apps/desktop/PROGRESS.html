@@ -3,7 +3,6 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="refresh" content="5">
   <title>Focus Tracker — Live Build</title>
   <style>
     :root {
@@ -481,7 +480,7 @@
         <p>ReleaseFast is packaged as an ad-hoc signed arm64 app; strict codesign, system SQLite linkage, and a moved-bundle launch all pass.</p>
       </article>
       <article class="track">
-        <div class="track-top"><h3>Polished DMG</h3><span class="status done">Verified · final</span></div>
+        <div class="track-top"><h3>Polished DMG</h3><span class="status done">Verified · candidate</span></div>
         <p>The final UDZO image has exact visible and hidden payloads, Retina art, custom volume icon, rollback-protected publication, matching whole-bundle CDHash, and a successful mount-copy-launch-SQLite proof.</p>
       </article>
       <article class="track">
@@ -523,7 +522,7 @@
         <ul>
           <li>First audit caught the SDK tray path resolver gap</li>
           <li>Packaged tray icon now resolves from the executable absolutely</li>
-          <li>11/11 build steps, 51/51 authored native tests (29 app/runtime + 20 SQLite + 2 theme), and strict model/markup checks pass</li>
+          <li>11/11 build steps, 52/52 authored native tests (30 app/runtime + 20 SQLite + 2 theme), and strict model/markup checks pass</li>
           <li>Moved bundle launches from /tmp with isolated SQLite and live tray</li>
         </ul>
       </article>
@@ -542,7 +541,7 @@
           <li>Exact root whitelist; no FSEvents, Spotlight, or packaging leak</li>
           <li>Mounted bundle is identical to the canonical ReleaseFast app</li>
           <li>Strict signature, arm64 executable hash, and outer CDHash match</li>
-          <li>Published checksum: <code>b85af3c7…7eb6e1</code></li>
+          <li>Candidate checksum: <code>958d058e…a9051</code></li>
         </ul>
       </article>
       <article class="critic">
@@ -564,7 +563,7 @@
       <ul>
         <li><span class="gate-icon live">•</span><span><strong>Comparative UX:</strong> open. The real-use judge returned <code>NO RESULT</code> because Codex Desktop cannot be exercised through the same interaction harness; no screenshot score is accepted as UX evidence.</span></li>
         <li><span class="gate-icon pass">✓</span><span><strong>Focus operational UX:</strong> independent single-instance re-audit passed every exercised journey with no P0/P1/P2, focus-critical cases repeated 3/3, dialog bounds contained, and <code>dispatch_errors=0</code>.</span></li>
-        <li><span class="gate-icon pass">✓</span><span><strong>Native contracts:</strong> a fresh-cache <code>native test</code> run completed 11/11 build steps and passed 51/51 authored cases (29 app/runtime + 20 SQLite + 2 theme); manifest, three strict markup views, <code>native check --strict</code>, and <code>git diff --check</code> pass.</span></li>
+        <li><span class="gate-icon pass">✓</span><span><strong>Native contracts:</strong> a fresh-cache <code>native test</code> run completed 11/11 build steps and passed 52/52 authored cases (30 app/runtime + 20 SQLite + 2 theme); manifest, three strict markup views, <code>native check --strict</code>, and <code>git diff --check</code> pass.</span></li>
         <li><span class="gate-icon pass">✓</span><span><strong>Real runtime:</strong> nonblank Metal canvas, <code>dispatch_errors=0</code>, and authoritative SQLite CRUD/timer operations were observed.</span></li>
         <li><span class="gate-icon pass">✓</span><span><strong>Native persistence:</strong> direct linkage to <code>/usr/lib/libsqlite3.dylib</code>; no Homebrew runtime dependency.</span></li>
         <li><span class="gate-icon pass">✓</span><span><strong>Durability:</strong> hostile schema, busy lock, semantic corruption, clock rollback, restore continuity, exact Undo state, recent-history filtering, and late completion pass 20 isolated SQLite tests.</span></li>
@@ -578,7 +577,7 @@
         <li><span class="gate-icon pass">✓</span><span><strong>Compact-window contract:</strong> idle, running, paused, completion, write-error, loading, and fatal states plus keyboard/accessibility verification pass.</span></li>
         <li><span class="gate-icon pass">✓</span><span><strong>Expansion contracts:</strong> manifest, three strict markup views, TypeScript→Zig compilation, status-menu bounds, and Quick Focus window lifecycle tests pass.</span></li>
         <li><span class="gate-icon pass">✓</span><span><strong>Expansion sign-off:</strong> independent visual, accessibility/interactivity, and reliability/architecture/package critics all returned PASS after their blockers were fixed and rechecked.</span></li>
-        <li><span class="gate-icon pass">✓</span><span><strong>Final DMG:</strong> SHA-256 <code>b85af3c7ae1ecd6997c92386a8a0f79a8a267bc70134ae5a9bc0c6c2c97eb6e1</code>; 7,116,453-byte UDZO read-only image, exact root payload, Retina presentation, strict ad-hoc signature, matching CDHash, mount-copy-launch, real keyboard journey, LaunchServices relaunch recovery, SQLite integrity, and graceful exit all pass.</span></li>
+        <li><span class="gate-icon pass">✓</span><span><strong>Current DMG candidate:</strong> SHA-256 <code>958d058ed95961ea4f9036f2cd8d49dce16a27b53cb728de2fda45071fba9051</code>; 7,936,563-byte UDZO read-only image, exact root payload, Retina presentation, strict ad-hoc signature, executable SHA-256 <code>e3111ceb…6a2c2</code>, and matching outer CDHash <code>b4c87e5277a576c0d7a365d48473a51e6ca85722</code> pass. It is a locally validated candidate, not a published GitHub release; the full installed-app journey remains historical evidence from checkpoint <code>8ba2225</code>.</span></li>
       </ul>
     </section>
 
@@ -587,14 +586,14 @@
       <p>Latest decisions first</p>
     </div>
     <ol class="timeline">
-      <li><time>UX gate closeout · PASS / NO RESULT</time>A clean detached checkout at <code>8ba2225</code> completed a valid isolated single-process rerun: create, Start/Pause/Resume, Quick Focus hand-off, running-session relaunch recovery, Escape from the end confirmation, recorded focus and break, Ledger, and keyboard Settings persistence all passed with <code>dispatch_errors=0</code> and SQLite integrity <code>ok</code>. Native acceptance passed 11/11 steps and 52/52 tests. No product blocker was reproduced, so the verified DMG remains current. Codex Desktop control was explicitly refused by policy; comparative UX is therefore <strong>NO RESULT</strong>, with no screenshot substitute.</li>
+      <li><time>UX gate closeout · PASS / NO RESULT</time>A clean detached checkout at <code>8ba2225</code> completed a valid isolated single-process rerun: create, Start/Pause/Resume, Quick Focus hand-off, running-session relaunch recovery, Escape from the end confirmation, recorded focus and break, Ledger, and keyboard Settings persistence all passed with <code>dispatch_errors=0</code> and SQLite integrity <code>ok</code>. Native acceptance passed 11/11 steps and 52/52 tests. That checkpoint remains historical journey evidence; later byte-distinct candidates are not silently assigned its result. Codex Desktop control was explicitly refused by policy; comparative UX is therefore <strong>NO RESULT</strong>, with no screenshot substitute.</li>
       <li><time>Holistic continuity re-audit · PASS</time>A harsh journey judge first vetoed Restore because it stranded the user in an empty Archived view. After the fix, Archive → Archived → Restore returned immediately to Today/Open with the recovered task selected and ready; the full Start → Pause → Resume → End path then passed with no P0/P1/P2.</li>
       <li><time>Operational re-audit · PASS</time>Task actions gained a discoverable ellipsis menu, Undo restores the exact prior state, and settings/retry/focus routing were rechecked. Rename, Archive/Restore, Purge, End, Settings, Unicode input, and timer transport completed with contained bounds and zero dispatch errors.</li>
-      <li><time>Installed artifact · PASS</time>The final DMG was mounted read-only and copied into an isolated Applications directory. That exact arm64 app created a task with real keyboard input, completed Start → Pause → Quick Focus → Resume, quit, relaunched through LaunchServices on the same database, visibly recovered the running session, recorded elapsed focus, completed a short break, showed both entries in Ledger, persisted Settings 25 → 50 after close/reopen, returned ready, and exited with zero live sessions, zero Focus Tracker processes, and SQLite integrity <code>ok</code>.</li>
-      <li><time>Build orchestration corrected</time>Long-running Native SDK build sessions are now polled to their actual exit before any artifact is accepted. Fresh-cache acceptance then completed 11/11 build steps and passed 51/51 authored tests, and the canonical bundle and DMG were rebuilt only from the completed ReleaseFast output.</li>
+      <li><time>Installed artifact · PASS at 8ba2225</time>The checkpoint DMG was mounted read-only and copied into an isolated Applications directory. That exact arm64 app created a task with real keyboard input, completed Start → Pause → Quick Focus → Resume, quit, relaunched through LaunchServices on the same database, visibly recovered the running session, recorded elapsed focus, completed a short break, showed both entries in Ledger, persisted Settings 25 → 50 after close/reopen, returned ready, and exited with zero live sessions, zero Focus Tracker processes, and SQLite integrity <code>ok</code>.</li>
+      <li><time>Build orchestration corrected</time>Long-running Native SDK build sessions are now polled to their actual exit before any artifact is accepted. Fresh-cache acceptance then completed 11/11 build steps and passed 52/52 authored tests, and the canonical bundle and DMG were rebuilt only from the completed ReleaseFast output.</li>
       <li><time>UX benchmark · NO RESULT</time>The judge was reassigned from static frames to real journeys. A Computer Use run lost its Focus window and was invalidated; independently, the runner explicitly refuses control of Codex Desktop. No comparative score or preference is claimed.</li>
       <li><time>Invalid comparison withdrawn</time>The earlier 1180 × 760 A/B compared a clean app capture with an artificially cropped desktop frame and measured visual framing, not UX. It is no longer release evidence.</li>
-      <li><time>Final DMG · verified</time>The published 7,116,453-byte image and sidecar pass structural verification. SHA-256: <code>b85af3c7ae1ecd6997c92386a8a0f79a8a267bc70134ae5a9bc0c6c2c97eb6e1</code>; executable SHA-256: <code>bec1e63b…ee8d5f</code>; outer CDHash: <code>9820dab6a0fa804c77765f8b83dc7c8674c6d56f</code>.</li>
+      <li><time>Current DMG candidate · verified</time>The locally built, not-yet-published 7,936,563-byte image and sidecar pass structural verification. SHA-256: <code>958d058ed95961ea4f9036f2cd8d49dce16a27b53cb728de2fda45071fba9051</code>; executable SHA-256: <code>e3111ceb…6a2c2</code>; outer CDHash: <code>b4c87e5277a576c0d7a365d48473a51e6ca85722</code>.</li>
       <li><time>DMG reliability corrections</time>The harsh release critic caught packaging art inside the app, hidden <code>.fseventsd</code>, two overstrong documentation claims, and a missing whole-bundle CDHash comparison. Fresh packaging, exact root whitelists, honest scope, and CDHash enforcement fixed all four before final publication.</li>
       <li><time>DMG visual gate · PASS</time>After the first real mount exposed unreadable Finder labels, satin ledger tabs and stronger product hierarchy landed. A clean eject/remount screenshot received an independent <strong>visual PASS</strong>.</li>
       <li><time>DMG gate 1 · now</time>The first end-to-end image passed its structural and Retina-background checks but failed the custom-volume-icon assertion after UDZO conversion. Publication stopped automatically; no incomplete DMG was released.</li>
@@ -626,7 +625,7 @@
     </ol>
 
     <footer>
-      <span class="live">Live artifact · refreshes every 5 seconds</span>
+      <span class="live">Static artifact · updated with validated evidence</span>
       <span>Source of truth: <code>PROGRESS.html</code></span>
     </footer>
   </main>

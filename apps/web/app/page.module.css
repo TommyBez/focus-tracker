@@ -133,7 +133,7 @@
 
 .heroIntro {
   padding-bottom: 7px;
-  animation: introReveal 600ms 80ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: intro-reveal 600ms 80ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .heroIntro > p:first-child {
@@ -198,7 +198,7 @@
 
 .productProof {
   margin: clamp(62px, 8vw, 108px) 0 0;
-  animation: proofReveal 720ms 140ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: proof-reveal 720ms 140ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .productScreenshot {
@@ -532,12 +532,12 @@
   gap: 24px;
 }
 
-@keyframes introReveal {
+@keyframes intro-reveal {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes proofReveal {
+@keyframes proof-reveal {
   from { opacity: 0; transform: translateY(18px); }
   to { opacity: 1; transform: translateY(0); }
 }

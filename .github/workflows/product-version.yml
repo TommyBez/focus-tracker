@@ -130,14 +130,15 @@ jobs:
                 // content hash. Automatic edits below must preserve it byte-for-byte.
                 helper.extractNativeSdkHash(headBuild, `head ${BUILD_PATH}`);
                 const expectedVersion = helper.bumpPatch(baseAppVersion);
+                const versionComparison = helper.compareVersions(headAppVersion, baseAppVersion);
                 const sameRepository =
                   pr.head.repo.full_name.toLowerCase() === pr.base.repo.full_name.toLowerCase();
 
-                if (headAppVersion === expectedVersion) {
+                if (versionComparison > 0) {
                   statusState = "success";
-                  statusDescription = `Desktop version is ${expectedVersion}`;
+                  statusDescription = `Desktop version advances ${baseAppVersion} to ${headAppVersion}`;
                   core.info(statusDescription);
-                } else if (headAppVersion === baseAppVersion && sameRepository) {
+                } else if (versionComparison === 0 && sameRepository) {
                   const updatedApp = helper.replaceTopLevelVersion(headApp, expectedVersion, APP_PATH);
                   const updatedBuild = helper.replaceTopLevelVersion(headBuild, expectedVersion, BUILD_PATH);
                   helper.assertNativeSdkHashPreserved(headBuild, updatedBuild, BUILD_PATH);
@@ -188,11 +189,11 @@ jobs:
                   statusState = "success";
                   statusDescription = `Bumped desktop version ${baseAppVersion} to ${expectedVersion}`;
                   core.info(`${statusDescription}: ${result.createCommitOnBranch.commit.url}`);
-                } else if (headAppVersion === baseAppVersion && !sameRepository) {
-                  throw new Error(`fork pull requests must set both desktop versions manually to ${expectedVersion}`);
+                } else if (versionComparison === 0 && !sameRepository) {
+                  throw new Error(`fork pull requests must set both desktop versions above base ${baseAppVersion}`);
                 } else {
                   throw new Error(
-                    `desktop version ${headAppVersion} must equal base ${baseAppVersion} for auto-bump or expected ${expectedVersion}`,
+                    `desktop version ${headAppVersion} must not be lower than base ${baseAppVersion}`,
                   );
                 }
               }

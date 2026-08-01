@@ -62,7 +62,7 @@ preference claim:
   SQLite, and reopened selected and focused. A separate process restart
   recovered the same three tasks, two sessions, and 50-minute preference with
   `PRAGMA integrity_check` returning `ok`.
-- A fresh-cache native acceptance run passed 51/51 authored tests: 29
+- A fresh-cache native acceptance run passed 52/52 authored tests: 30
   app/runtime, 20 isolated SQLite, and 2 theme tests. All 11/11 build steps,
   the manifest, and all three strict markup/model contracts passed in the same
   run.
@@ -74,12 +74,26 @@ preference claim:
   and native child widgets, but a complete spoken-VoiceOver claim remains open
   until the SDK surface can expose that semantic metadata.
 
-The final installed-artifact journey also passes. The published DMG was mounted
-read-only, its app copied into an isolated `Applications` directory, and the
-copied executable and outer CDHash matched the packaged source. The exact copied
-app accepted a real keyboard-created task, started and paused its focus block,
-opened Quick Focus against that same paused session, resumed, quit, and
-relaunched through macOS LaunchServices (`open -n`) on the same SQLite store.
+The current 0.1.1 arm64 release candidate passes independent package
+verification: its UDZO image mounts read-only, its exact root payload and Retina
+presentation are valid, and the mounted executable and outer CDHash match the
+packaged ReleaseFast app. This candidate has not yet been published.
+
+```text
+DMG bytes:          7,936,563
+DMG SHA-256:        958d058ed95961ea4f9036f2cd8d49dce16a27b53cb728de2fda45071fba9051
+Executable SHA-256: e3111cebb34a6a10717a1c54c42628fe3de7b5627b58c38e767eed863176a2c2
+Outer app CDHash:   b4c87e5277a576c0d7a365d48473a51e6ca85722
+```
+
+The full installed-artifact journey below was last executed at checkpoint
+`8ba2225`; it remains historical journey evidence and is not re-attributed to
+the byte-distinct candidate above. That DMG was mounted read-only, its app copied
+into an isolated `Applications` directory, and the copied executable and outer
+CDHash matched its packaged source. The exact copied app accepted a real
+keyboard-created task, started and paused its focus block, opened Quick Focus
+against that same paused session, resumed, quit, and relaunched through macOS
+LaunchServices (`open -n`) on the same SQLite store.
 The app visibly recovered the running session with elapsed wall time intact.
 It then recorded the elapsed focus, started and ended a short break, returned
 to the ready state, exposed the focus and break entries in Ledger, changed the
@@ -88,16 +102,7 @@ after closing and reopening the window. It then quit cleanly. The final database
 had revision 8, zero live sessions, the persisted 50-minute preference, and
 `PRAGMA integrity_check=ok`; a final process check found zero Focus Tracker
 processes. Direct invocation of the raw Mach-O is not treated as an
-installed-app launch and is outside this pass.
-
-Current artifact identity:
-
-```text
-DMG bytes:          7,116,453
-DMG SHA-256:        b85af3c7ae1ecd6997c92386a8a0f79a8a267bc70134ae5a9bc0c6c2c97eb6e1
-Executable SHA-256: bec1e63b64fb07e835b65a8595de51c27c0c5618b9ba50f3a03de9c176ee8d5f
-Outer app CDHash:   9820dab6a0fa804c77765f8b83dc7c8674c6d56f
-```
+installed-app launch and is outside this historical pass.
 
 ### Run identity and validity
 
@@ -180,10 +185,11 @@ recorded break, no live session, the 50-minute preference, and
 
 F9 remains supported by the complete recovery evidence already recorded above
 and by the current 52/52 native test pass, including retry-slot/deadline and
-SQLite failure coverage; this closeout introduced no new product behavior or
-reproducible blocker. F10 remains the unchanged installed-artifact PASS above:
-no product file changed, so the published DMG and its verified identity did not
-become obsolete and were not regenerated.
+SQLite failure coverage; this closeout introduced no reproducible blocker. F10
+is the historical installed-artifact PASS described above. Later product and
+branding changes produced the byte-distinct 0.1.1 candidate identified above;
+its structural package gate was rerun, while the full interactive installed-app
+journey was not re-attributed without a new run.
 
 The current technical gate passes: `native build -Dautomation=true`, all 11/11
 `native test` build steps and 52/52 tests, all three strict markup/model checks,
