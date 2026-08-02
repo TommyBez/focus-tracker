@@ -67,7 +67,7 @@ function DownloadActions() {
     <div className={styles.downloadActions}>
       <a className={styles.primaryCta} href={DOWNLOAD_URL}>
         <DownloadIcon />
-        <span>Download beta for Apple Silicon</span>
+        <span>Download the beta</span>
       </a>
       <a className={styles.checksumLink} href={CHECKSUM_URL}>
         View SHA-256 checksum
@@ -169,13 +169,13 @@ export default function Home() {
 
         <section className={styles.privacySection} id="privacy" aria-labelledby="privacy-title">
           <div>
-            <p className={styles.kicker}>Private by architecture</p>
             <h2 id="privacy-title">Your focus history stays on your Mac.</h2>
           </div>
           <div className={styles.privacyDetail}>
             <p>
-              Tasks, preferences, and sessions are persisted in a local SQLite database.
-              Focus Tracker has no account system and no cloud sync.
+              <strong>Private by architecture.</strong> Tasks, preferences, and sessions are
+              persisted in a local SQLite database. Focus Tracker has no account system and
+              no cloud sync.
             </p>
             <dl className={styles.privacyFacts}>
               <div>

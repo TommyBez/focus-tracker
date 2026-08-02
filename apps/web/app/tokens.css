@@ -1,0 +1,63 @@
+/* Hallmark · genre: editorial · macrostructure: Long Document (in-place enhancement)
+ * theme: preserved brand (warm paper · cobalt accent · Fraunces + Manrope)
+ * nav: N1b refined (double-rule masthead) · footer: Ft2 inline · enrichment: none (real product video, pre-existing)
+ * pre-emit critique: P4 H4 E4 S4 R5 V4
+ */
+:root {
+  /* Colour — warm-paper anchor (hue 100), cobalt accent (hue 268) */
+  --paper: oklch(95.4% 0.006 100);
+  --paper-bright: oklch(97.5% 0.005 100);
+  --paper-2: oklch(93% 0.007 100);
+  --ink: oklch(17.5% 0.014 285);
+  --ink-soft: oklch(39.5% 0.012 285);
+  --ink-muted: oklch(46% 0.011 285);
+  --cobalt: oklch(50% 0.19 268);
+  --cobalt-dark: oklch(44% 0.19 268);
+  --cobalt-bright: oklch(50% 0.19 268);
+  --rule: oklch(86% 0.006 100);
+  --rule-strong: oklch(80% 0.007 100);
+  --frame: oklch(19% 0.012 265);
+  --frame-line: oklch(97% 0.005 100 / 0.24);
+  --frame-glass: oklch(19% 0.012 265 / 0.9);
+  --warn-rule: oklch(55% 0.1 75);
+  --warn-ink: oklch(40% 0.07 70);
+  --warn-paper: oklch(92.5% 0.015 90);
+
+  /* Shadows — ink-tinted, alpha as modifier only */
+  --shadow-icon: 0 6px 16px oklch(17.5% 0.014 285 / 0.18);
+  --shadow-proof: 0 28px 70px oklch(17.5% 0.014 285 / 0.2);
+  --shadow-control: 0 8px 24px oklch(17.5% 0.014 285 / 0.2);
+
+  /* Type — display serif + body sans */
+  --serif: var(--font-fraunces), "Iowan Old Style", georgia, serif;
+  --sans: var(--font-manrope), "Avenir Next", "Helvetica Neue", sans-serif;
+
+  /* Spacing — 4 pt scale */
+  --space-2xs: 0.25rem;
+  --space-xs: 0.5rem;
+  --space-sm: 0.75rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2.5rem;
+  --space-2xl: 4rem;
+  --space-3xl: 6rem;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro: 120ms;
+  --dur-short: 180ms;
+  --dur-long: 420ms;
+
+  /* Layers */
+  --z-sticky: 200;
+
+  --content: min(1280px, calc(100vw - 56px));
+}
+
+@media (max-width: 680px) {
+  :root {
+    --content: min(100% - 28px, 1280px);
+  }
+}
