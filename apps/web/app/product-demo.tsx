@@ -75,6 +75,7 @@ export function ProductDemo() {
 
     if (video.paused) {
       setPausedByUser(false);
+      if (!isVisible || !isPageVisible) return;
       void video.play().catch(() => setIsPlaying(false));
       return;
     }
@@ -106,7 +107,6 @@ export function ProductDemo() {
           <video
             ref={videoRef}
             className={styles.productVideo}
-            autoPlay
             muted
             loop
             playsInline
