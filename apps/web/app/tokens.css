@@ -29,7 +29,7 @@
   --shadow-control: 0 8px 24px oklch(17.5% 0.014 285 / 0.2);
 
   /* Type — display serif + body sans */
-  --serif: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  --serif: var(--font-fraunces), "Iowan Old Style", georgia, serif;
   --sans: var(--font-manrope), "Avenir Next", "Helvetica Neue", sans-serif;
 
   /* Spacing — 4 pt scale */
