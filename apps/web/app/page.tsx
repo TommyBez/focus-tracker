@@ -1,5 +1,6 @@
 import Image from "next/image";
 import styles from "./page.module.css";
+import { ProductDemo } from "./product-demo";
 import {
   APPLE_GATEKEEPER_URL,
   CHECKSUM_URL,
@@ -138,14 +139,7 @@ export default function Home() {
 
           <figure className={styles.productProof}>
             <div className={styles.productScreenshot}>
-              <Image
-                src="/product/focus-tracker-running.webp"
-                alt="Focus Tracker running a 25 minute block for Shape the project brief, with two other open tasks in the local ledger"
-                width={2360}
-                height={1520}
-                sizes="(max-width: 700px) calc(100vw - 28px), (max-width: 1280px) calc(100vw - 56px), 1280px"
-                preload
-              />
+              <ProductDemo />
             </div>
           </figure>
         </section>
