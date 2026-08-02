@@ -1,16 +1,5 @@
-:root {
-  --ink: #111218;
-  --ink-soft: #474952;
-  --ink-muted: #5f6169;
-  --cobalt: #2f57d7;
-  --cobalt-dark: #2046bd;
-  --cobalt-bright: #2f57d7;
-  --paper: #f2f1ec;
-  --rule: rgba(17, 18, 24, 0.12);
-  --rule-strong: rgba(17, 18, 24, 0.2);
-  --content: min(1280px, calc(100vw - 56px));
-  --sans: var(--font-manrope), "Avenir Next", "Helvetica Neue", sans-serif;
-}
+/* Hallmark · genre: editorial · macrostructure: Long Document (in-place enhancement) · theme: preserved brand · anchor hue: warm paper 100 / cobalt 268 */
+@import "./tokens.css";
 
 * {
   box-sizing: border-box;
@@ -18,12 +7,14 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: clip;
   background: var(--paper);
 }
 
 body {
   margin: 0;
   min-width: 320px;
+  overflow-x: clip;
   background: var(--paper);
   color: var(--ink);
   font-family: var(--sans);
@@ -34,7 +25,7 @@ body {
 }
 
 ::selection {
-  color: #fff;
+  color: var(--paper-bright);
   background: var(--cobalt);
 }
 
@@ -45,6 +36,7 @@ a {
 }
 
 a:focus-visible,
+button:focus-visible,
 summary:focus-visible {
   outline: 2px solid var(--cobalt);
   outline-offset: 4px;
@@ -54,12 +46,6 @@ button,
 a,
 summary {
   -webkit-tap-highlight-color: transparent;
-}
-
-@media (max-width: 680px) {
-  :root {
-    --content: min(100% - 28px, 1280px);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
