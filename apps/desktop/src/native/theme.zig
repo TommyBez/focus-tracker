@@ -151,6 +151,31 @@ pub fn tokens(options: Options) canvas.DesignTokens {
                     }),
                     .radius = 5,
                 },
+                // A menu row draws no focus ring: its wash IS the pointer's
+                // and the keyboard's only position marker. The quiet surface
+                // register pulls `surface_subtle` to within a couple of
+                // percent of the popover's own `surface`, so the framework
+                // fallback wash would land the highlighted row on the same
+                // color as the menu behind it. State the highlight from the
+                // live accent instead — the same language the selected
+                // ledger row speaks, one step louder because it is transient
+                // — and keep it stated for menu rows only so list rows keep
+                // their quiet hover.
+                .menu_item = .{
+                    .hover_background = withAlpha(colors.accent, switch (scheme) {
+                        .light => 0.16,
+                        .dark => 0.26,
+                    }),
+                    .active_background = withAlpha(colors.accent, switch (scheme) {
+                        .light => 0.16,
+                        .dark => 0.26,
+                    }),
+                    .pressed_background = withAlpha(colors.accent, switch (scheme) {
+                        .light => 0.24,
+                        .dark => 0.36,
+                    }),
+                    .radius = 5,
+                },
             },
         });
     }
@@ -198,6 +223,39 @@ fn mix(base: canvas.Color, ink: canvas.Color, amount: f32) canvas.Color {
 
 fn withAlpha(color: canvas.Color, alpha: f32) canvas.Color {
     return .{ .r = color.r, .g = color.g, .b = color.b, .a = alpha };
+}
+
+/// Source-over composite of a translucent wash on an opaque surface.
+fn over(wash: canvas.Color, surface: canvas.Color) canvas.Color {
+    const keep = 1.0 - wash.a;
+    return .{
+        .r = surface.r * keep + wash.r * wash.a,
+        .g = surface.g * keep + wash.g * wash.a,
+        .b = surface.b * keep + wash.b * wash.a,
+        .a = 1,
+    };
+}
+
+/// WCAG 2.x relative luminance of an sRGB-encoded channel triple.
+fn relativeLuminance(color: canvas.Color) f32 {
+    return 0.2126 * linearChannel(color.r) +
+        0.7152 * linearChannel(color.g) +
+        0.0722 * linearChannel(color.b);
+}
+
+fn linearChannel(value: f32) f32 {
+    const channel = std.math.clamp(value, 0, 1);
+    if (channel <= 0.04045) return channel / 12.92;
+    return std.math.pow(f32, (channel + 0.055) / 1.055, 2.4);
+}
+
+/// WCAG 2.x contrast ratio between two opaque colors.
+fn contrastRatio(a: canvas.Color, b: canvas.Color) f32 {
+    const la = relativeLuminance(a);
+    const lb = relativeLuminance(b);
+    const lighter = @max(la, lb);
+    const darker = @min(la, lb);
+    return (lighter + 0.05) / (darker + 0.05);
 }
 
 test "high contrast and reduced motion remain framework-owned" {
@@ -275,4 +333,42 @@ test "standard appearance applies accent and native control refinements" {
         actual.controls.list_item.active_background.?,
     );
     try std.testing.expectEqual(@as(f32, 0.20), dark.controls.list_item.active_background.?.a);
+}
+
+test "the highlighted menu row never lands on the menu's own color" {
+    // The shipped brand accent, so the guarantee is proved on what the app
+    // actually resolves rather than on a stand-in hue.
+    const accent = canvas.Color.rgb8(0x31, 0x56, 0xD9);
+    const light = tokens(.{ .accent = accent });
+    const dark = tokens(.{ .appearance = .{ .color_scheme = .dark }, .accent = accent });
+
+    for ([_]canvas.DesignTokens{ light, dark }) |resolved| {
+        // A dropdown menu fills with `colors.surface`; the row's highlight
+        // composites on top of it.
+        const surface = resolved.colors.surface;
+        const highlight = over(resolved.controls.menu_item.hover_background.?, surface);
+        const pressed = over(resolved.controls.menu_item.pressed_background.?, surface);
+
+        // The framework fallback wash is `surface_subtle`, which this
+        // register keeps within a whisker of `surface` — the bug being
+        // fixed. The stated highlight must separate further than it did.
+        try std.testing.expect(
+            contrastRatio(highlight, surface) > contrastRatio(resolved.colors.surface_subtle, surface),
+        );
+        // The house register's own hover wash separates by ~1.1:1 in light
+        // and ~1.2:1 in dark; hold at least that, in both schemes, for the
+        // one wash that has to carry keyboard position on its own.
+        try std.testing.expect(contrastRatio(highlight, surface) >= 1.2);
+        // Pressing deepens what focus already stated.
+        try std.testing.expect(contrastRatio(pressed, highlight) > 1.0);
+        // Menu ink is `colors.text` in every state, so the highlight has to
+        // keep the label comfortably readable.
+        try std.testing.expect(contrastRatio(resolved.colors.text, highlight) >= 7);
+        // Focus and hover paint the same row wash; keep them one value.
+        try std.testing.expectEqualDeep(
+            resolved.controls.menu_item.hover_background,
+            resolved.controls.menu_item.active_background,
+        );
+        try std.testing.expectEqual(@as(f32, 5), resolved.controls.menu_item.radius.?);
+    }
 }
