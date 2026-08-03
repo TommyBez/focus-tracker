@@ -224,13 +224,13 @@
         <if test="{saving or hasWriteError}">
           <separator />
           <if test="{saving}">
-            <row height="32" padding="4" gap="8" cross="center" label="Saving changes">
+            <row height="40" padding="4" gap="8" cross="center" label="Saving changes">
               <spinner />
               <text size="sm" foreground="text_muted">Saving</text>
             </row>
           </if>
           <else>
-            <row height="32" padding="4" gap="8" cross="center" label="Changes were not saved">
+            <row height="40" padding="4" gap="8" cross="center" label="Changes were not saved">
               <text size="sm" foreground="destructive"><span weight="medium">Unable to save</span></text>
               <text grow="1" size="sm" foreground="text_muted" overflow="ellipsis">{writeErrorText}</text>
               <button size="sm" variant="ghost" on-press="discard_failed_change">Discard</button>
