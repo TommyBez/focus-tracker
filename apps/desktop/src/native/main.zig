@@ -704,6 +704,17 @@ const ExtensionApp = struct {
             }
         }
 
+        if (global_hotkey.conflictsWithLocalTransportShortcut(committed)) {
+            // The manifest owns Command + Shift + Space for timer transport.
+            // A defensive read of an externally-written reserved value must
+            // not leave either that chord or a previously active chord live.
+            var inactive = committed;
+            inactive.enabled = false;
+            try self.hotkey.replaceCommitted(inactive);
+            try self.reportShortcut(runtime, .unavailable, committed);
+            return;
+        }
+
         if (self.hotkey_install_failed) {
             try self.reportShortcut(runtime, reportForMissingHandler(committed), committed);
             return;
@@ -2440,7 +2451,12 @@ test "shortcut preferences preserve the committed combo when native preflight re
     try std.testing.expect(core.quickShortcutEnabled(active.model));
     try std.testing.expectEqual(core.QuickShortcutKey.f, core.quickShortcutKey(active.model));
     try std.testing.expectEqual(core.QuickShortcutModifiers.command_shift, core.quickShortcutModifiers(active.model));
-    try std.testing.expectEqualStrings("Command + Shift + F", core.quickShortcutLabel(active.model));
+    try std.testing.expectEqualStrings(
+        "Command + Shift + US F position",
+        core.quickShortcutLabel(active.model),
+    );
+    try std.testing.expect(core.quickShortcutSpaceUnavailable(active.model));
+    try std.testing.expect(!core.quickShortcutCommandShiftUnavailable(active.model));
 
     const changing = core.update(active.model, .set_quick_shortcut_key_q);
     try std.testing.expect(changing.model.saving);
@@ -2466,6 +2482,17 @@ test "shortcut preferences preserve the committed combo when native preflight re
     disabled_settings.quickShortcutEnabled = false;
     disabled.settings = disabled_settings;
     disabled.quickShortcutActive = false;
+    try std.testing.expect(!core.quickShortcutSpaceUnavailable(disabled));
+    try std.testing.expect(!core.quickShortcutCommandShiftUnavailable(disabled));
+
+    const choosing_while_disabled = core.update(disabled, .set_quick_shortcut_key_q);
+    try std.testing.expect(choosing_while_disabled.model.saving);
+    try std.testing.expect(!choosing_while_disabled.model.pendingSettings.quickShortcutEnabled);
+    try std.testing.expectEqual(
+        core.QuickShortcutKey.q,
+        choosing_while_disabled.model.pendingSettings.quickShortcutKey,
+    );
+
     const enabling = core.update(disabled, .toggle_quick_shortcut);
     try std.testing.expect(enabling.model.pendingSettings.quickShortcutEnabled);
     const enabling_requested = core.update(enabling.model, .{ .intent_now = 1_500 });
@@ -2518,6 +2545,41 @@ test "missing Carbon handler still permits and reports an explicit disabled shor
         ExtensionApp.ShortcutReport.unavailable,
         ExtensionApp.reportForMissingHandler(enabled),
     );
+}
+
+test "global Quick Focus shortcut reserves the local timer transport chord" {
+    var extended: ExtensionApp = undefined;
+    extended.hotkey = .{};
+    extended.hotkey_install_failed = false;
+
+    const previous: global_hotkey.Config = .{
+        .enabled = false,
+        .key = .f,
+        .modifiers = .command_shift,
+    };
+    try extended.preflightShortcutCandidate(previous);
+
+    const reserved: global_hotkey.Config = .{
+        .enabled = true,
+        .key = .space,
+        .modifiers = .command_shift,
+    };
+    try std.testing.expect(global_hotkey.conflictsWithLocalTransportShortcut(reserved));
+    try std.testing.expectError(
+        error.HotKeyUnavailable,
+        extended.preflightShortcutCandidate(reserved),
+    );
+    try std.testing.expect(extended.hotkey.stagedMatches(previous));
+
+    var disabled = reserved;
+    disabled.enabled = false;
+    try std.testing.expect(!global_hotkey.conflictsWithLocalTransportShortcut(disabled));
+    try extended.preflightShortcutCandidate(disabled);
+    try std.testing.expect(extended.hotkey.stagedMatches(disabled));
+
+    var alternate = reserved;
+    alternate.modifiers = .command_option;
+    try std.testing.expect(!global_hotkey.conflictsWithLocalTransportShortcut(alternate));
 }
 
 test "shortcut preflight classification ignores ordinary settings and blocks SQLite on rejection" {

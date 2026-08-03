@@ -93,7 +93,7 @@ database is surfaced as a recovery error and is never silently replaced.
 | `⌘2` | Focus ledger |
 | `⌘,` | Settings |
 | `⌘⇧Space` | Start, pause, or resume the current focus block |
-| `⌘⇧F` | Open or refocus Quick Focus system-wide (configurable default) |
+| `⌘⇧` + US `F` position | Open or refocus Quick Focus system-wide (configurable default) |
 | `Space` | Pause or resume a running block, when no control has focus |
 
 `Space` is a last-resort fallback: a focused control answers its own keys and
@@ -109,11 +109,14 @@ The window close button hides the app while an active timer continues. Quitting
 the application is a distinct, explicit action.
 
 Settings can enable or disable the global Quick Focus shortcut and choose its
-modifier preset and key. Changes are registered with macOS before SQLite
-commits them: if a candidate is unavailable, the persisted and active shortcut
-stay unchanged. The default is Command + Shift + F. The registration exists
-only while Focus Tracker is running and requires no Accessibility or Input
-Monitoring permission.
+modifier preset and physical key position. Letter choices use their US keyboard
+positions, so the displayed shortcut stays explicit on layouts such as AZERTY
+or Dvorak; Space is layout-independent, and Command + Shift + Space stays
+reserved for Start or Pause Focus. Changes are registered with macOS before
+SQLite commits them: if a candidate is unavailable, the persisted and active
+shortcut stay unchanged. The default is Command + Shift plus the US F position.
+The registration exists only while Focus Tracker is running and requires no
+Accessibility or Input Monitoring permission.
 
 Quick Focus and Settings are mutually exclusive auxiliary windows. This keeps
 the Native SDK key fallback deterministic: `Escape` dismisses the active

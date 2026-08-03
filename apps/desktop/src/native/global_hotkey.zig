@@ -97,6 +97,10 @@ pub fn carbonModifiers(modifiers: Modifiers) u32 {
     };
 }
 
+pub fn conflictsWithLocalTransportShortcut(config: Config) bool {
+    return config.enabled and config.key == .space and config.modifiers == .command_shift;
+}
+
 pub const Manager = struct {
     const DispatchFn = *const fn (?*anyopaque) void;
 
@@ -148,6 +152,10 @@ pub const Manager = struct {
     /// Register a candidate without touching the committed registration.
     /// Only the active ID dispatches; the staged ID remains inert until DB OK.
     pub fn stage(self: *Manager, config: Config) !void {
+        // The app manifest owns Command + Shift + Space for timer transport.
+        // Reject it before touching an existing stage so a failed selection
+        // cannot disturb the saved or currently active Quick Focus shortcut.
+        if (conflictsWithLocalTransportShortcut(config)) return error.HotKeyUnavailable;
         self.rollbackStage();
         self.staged_config = config;
         if (self.activeMatches(config)) {

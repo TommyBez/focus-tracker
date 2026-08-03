@@ -1216,12 +1216,12 @@ export function quickShortcutModifiers(model: Model): QuickShortcutModifiers {
 }
 
 function quickShortcutKeyText(key: QuickShortcutKey): Bytes {
-  if (key === "q") return asciiBytes("Q");
-  if (key === "k") return asciiBytes("K");
-  if (key === "t") return asciiBytes("T");
-  if (key === "p") return asciiBytes("P");
+  if (key === "q") return asciiBytes("US Q position");
+  if (key === "k") return asciiBytes("US K position");
+  if (key === "t") return asciiBytes("US T position");
+  if (key === "p") return asciiBytes("US P position");
   if (key === "space") return asciiBytes("Space");
-  return asciiBytes("F");
+  return asciiBytes("US F position");
 }
 
 function quickShortcutModifiersText(modifiers: QuickShortcutModifiers): Bytes {
@@ -1250,6 +1250,14 @@ export function quickShortcutStatusText(model: Model): Bytes {
 
 export function quickShortcutHasError(model: Model): boolean {
   return model.quickShortcutError;
+}
+
+export function quickShortcutCommandShiftUnavailable(model: Model): boolean {
+  return model.settings.quickShortcutEnabled && model.settings.quickShortcutKey === "space";
+}
+
+export function quickShortcutSpaceUnavailable(model: Model): boolean {
+  return model.settings.quickShortcutEnabled && model.settings.quickShortcutModifiers === "command_shift";
 }
 
 export function quickShortcutSwitchKey(model: Model): number {

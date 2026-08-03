@@ -164,30 +164,32 @@
     <row gap="20" cross="start">
       <column grow="1" gap="6">
         <text size="sm" foreground="text_muted">Modifiers</text>
-        <toggle-group label="Global shortcut modifiers, first row" gap="2">
-          <toggle-button size="sm" selected="{quickShortcutModifiers == 'command_shift'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_modifiers_command_shift">Cmd + Shift</toggle-button>
-          <toggle-button size="sm" selected="{quickShortcutModifiers == 'command_option'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_modifiers_command_option">Cmd + Option</toggle-button>
-          <toggle-button size="sm" selected="{quickShortcutModifiers == 'command_control'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_modifiers_command_control">Cmd + Ctrl</toggle-button>
+        <toggle-group label="Global shortcut modifiers, choices 1 through 3 of 6" gap="2">
+          <toggle-button size="sm" selected="{quickShortcutModifiers == 'command_shift'}" disabled="{saving or hasWriteError or quickShortcutCommandShiftUnavailable}" on-toggle="set_quick_shortcut_modifiers_command_shift">Cmd + Shift</toggle-button>
+          <toggle-button size="sm" selected="{quickShortcutModifiers == 'command_option'}" disabled="{saving or hasWriteError}" on-toggle="set_quick_shortcut_modifiers_command_option">Cmd + Option</toggle-button>
+          <toggle-button size="sm" selected="{quickShortcutModifiers == 'command_control'}" disabled="{saving or hasWriteError}" on-toggle="set_quick_shortcut_modifiers_command_control">Cmd + Ctrl</toggle-button>
         </toggle-group>
-        <toggle-group label="Global shortcut modifiers, second row" gap="2">
-          <toggle-button size="sm" selected="{quickShortcutModifiers == 'control_shift'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_modifiers_control_shift">Ctrl + Shift</toggle-button>
-          <toggle-button size="sm" selected="{quickShortcutModifiers == 'control_option'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_modifiers_control_option">Ctrl + Option</toggle-button>
-          <toggle-button size="sm" selected="{quickShortcutModifiers == 'command_control_shift'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_modifiers_command_control_shift">Cmd + Ctrl + Shift</toggle-button>
+        <toggle-group label="Global shortcut modifiers, choices 4 through 6 of 6" gap="2">
+          <toggle-button size="sm" selected="{quickShortcutModifiers == 'control_shift'}" disabled="{saving or hasWriteError}" on-toggle="set_quick_shortcut_modifiers_control_shift">Ctrl + Shift</toggle-button>
+          <toggle-button size="sm" selected="{quickShortcutModifiers == 'control_option'}" disabled="{saving or hasWriteError}" on-toggle="set_quick_shortcut_modifiers_control_option">Ctrl + Option</toggle-button>
+          <toggle-button size="sm" selected="{quickShortcutModifiers == 'command_control_shift'}" disabled="{saving or hasWriteError}" on-toggle="set_quick_shortcut_modifiers_command_control_shift">Cmd + Ctrl + Shift</toggle-button>
         </toggle-group>
       </column>
 
       <column width="252" gap="6">
-        <text size="sm" foreground="text_muted">Key</text>
-        <toggle-group label="Global shortcut key" gap="2">
-          <toggle-button size="sm" selected="{quickShortcutKey == 'f'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_key_f">F</toggle-button>
-          <toggle-button size="sm" selected="{quickShortcutKey == 'q'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_key_q">Q</toggle-button>
-          <toggle-button size="sm" selected="{quickShortcutKey == 'k'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_key_k">K</toggle-button>
-          <toggle-button size="sm" selected="{quickShortcutKey == 't'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_key_t">T</toggle-button>
-          <toggle-button size="sm" selected="{quickShortcutKey == 'p'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_key_p">P</toggle-button>
-          <toggle-button size="sm" selected="{quickShortcutKey == 'space'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_key_space">Space</toggle-button>
+        <text size="sm" foreground="text_muted">Physical key · US positions</text>
+        <toggle-group label="Global shortcut physical key, US keyboard positions" gap="2">
+          <toggle-button size="sm" label="US F key position" selected="{quickShortcutKey == 'f'}" disabled="{saving or hasWriteError}" on-toggle="set_quick_shortcut_key_f">F</toggle-button>
+          <toggle-button size="sm" label="US Q key position" selected="{quickShortcutKey == 'q'}" disabled="{saving or hasWriteError}" on-toggle="set_quick_shortcut_key_q">Q</toggle-button>
+          <toggle-button size="sm" label="US K key position" selected="{quickShortcutKey == 'k'}" disabled="{saving or hasWriteError}" on-toggle="set_quick_shortcut_key_k">K</toggle-button>
+          <toggle-button size="sm" label="US T key position" selected="{quickShortcutKey == 't'}" disabled="{saving or hasWriteError}" on-toggle="set_quick_shortcut_key_t">T</toggle-button>
+          <toggle-button size="sm" label="US P key position" selected="{quickShortcutKey == 'p'}" disabled="{saving or hasWriteError}" on-toggle="set_quick_shortcut_key_p">P</toggle-button>
+          <toggle-button size="sm" label="Space key" selected="{quickShortcutKey == 'space'}" disabled="{saving or hasWriteError or quickShortcutSpaceUnavailable}" on-toggle="set_quick_shortcut_key_space">Space</toggle-button>
         </toggle-group>
       </column>
     </row>
+
+    <text size="sm" foreground="text_muted" wrap="true">Letter choices use physical US keyboard positions. Cmd + Shift + Space stays reserved for Start or Pause Focus.</text>
 
     <if test="{quickShortcutHasError}">
       <text size="sm" foreground="destructive" wrap="true">{quickShortcutStatusText}</text>
