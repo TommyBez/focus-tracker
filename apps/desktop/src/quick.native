@@ -154,9 +154,10 @@
               </row>
               <row>
                 <toggle-group grow="1" label="Focus length presets" gap="2">
-                  <toggle-button grow="1" size="sm" selected="{focusLengthMinutes == 25}" on-toggle="use_duration_25">25 min</toggle-button>
-                  <toggle-button grow="1" size="sm" selected="{focusLengthMinutes == 50}" on-toggle="use_duration_50">50 min</toggle-button>
-                  <toggle-button grow="1" size="sm" selected="{focusLengthMinutes == 90}" on-toggle="use_duration_90">90 min</toggle-button>
+                  <toggle-button grow="1" size="sm" selected="{focusLengthMinutes == 15}" on-toggle="use_duration_15">15</toggle-button>
+                  <toggle-button grow="1" size="sm" selected="{focusLengthMinutes == 25}" on-toggle="use_duration_25">25</toggle-button>
+                  <toggle-button grow="1" size="sm" selected="{focusLengthMinutes == 50}" on-toggle="use_duration_50">50</toggle-button>
+                  <toggle-button grow="1" size="sm" selected="{focusLengthMinutes == 90}" on-toggle="use_duration_90">90</toggle-button>
                 </toggle-group>
               </row>
               <button key="{quickStartFocusKey}" grow="1" variant="primary" icon="play" autofocus="{startAutofocus}" disabled="{not quickCanStart}" on-press="start_focus">{quickStartLabel}</button>

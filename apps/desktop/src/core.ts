@@ -202,6 +202,7 @@ export type Msg =
   | { readonly kind: "set_duration_25" }
   | { readonly kind: "set_duration_50" }
   | { readonly kind: "set_duration_90" }
+  | { readonly kind: "use_duration_15" }
   | { readonly kind: "use_duration_25" }
   | { readonly kind: "use_duration_50" }
   | { readonly kind: "use_duration_90" }
@@ -259,6 +260,7 @@ export type Msg =
   | { readonly kind: "quit_command" }
   | { readonly kind: "show_window" }
   | { readonly kind: "escape_pressed" }
+  | { readonly kind: "space_transport" }
   | { readonly kind: "escape_main_pressed" }
   | { readonly kind: "escape_quick_pressed" }
   | { readonly kind: "escape_settings_pressed" }
@@ -359,6 +361,7 @@ export const viewUnbound = [
   "quit_command",
   "show_window",
   "escape_pressed",
+  "space_transport",
   "escape_main_pressed",
   "escape_quick_pressed",
   "escape_settings_pressed",
@@ -382,7 +385,7 @@ export const viewUnbound = [
 
 const EMPTY = asciiBytes("");
 const TITLE_CAPACITY = 240;
-const DEFAULT_PANE = 0.27;
+const DEFAULT_PANE = 0.30;
 const FOCUS_PANE = 0.24;
 const MAX_SAFE_TIME = 9007199254740991;
 
@@ -1461,6 +1464,17 @@ export function commandMsg(name: string): Msg | null {
 
 export function keyMsg(key: KeyEvent): Msg | null {
   if (key.key === "escape") return { kind: "escape_pressed" };
+  // Only an unclaimed key reaches here: focused controls answer their own
+  // keys first and editable text keeps typing. A bare Space with nothing
+  // focused is the platform gesture for "hold this" — but it may only work a
+  // block that already exists, never conjure one out of a stray keypress.
+  if (
+    key.key === "space" &&
+    !key.shift &&
+    !key.control &&
+    !key.alt &&
+    !key.super
+  ) return { kind: "space_transport" };
   return null;
 }
 
@@ -1511,6 +1525,7 @@ function startsAuthoritativeWrite(msg: Msg): boolean {
     case "toggle_sound":
     case "toggle_focus_command":
     case "quick_toggle_command":
+    case "space_transport":
     case "intent_now":
       return true;
     default:
@@ -1787,6 +1802,8 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
     // Choosing the length of the next block is a local decision, not a
     // preference change: it commits nothing to SQLite and never blocks on a
     // pending write, so the control stays instant however fast it is used.
+    case "use_duration_15":
+      return { ...model, focusDraftMinutes: 15 };
     case "use_duration_25":
       return { ...model, focusDraftMinutes: 25 };
     case "use_duration_50":
@@ -2188,7 +2205,9 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       if (hasBlockingSurface(model)) return model;
       return { ...model, section: "ledger" };
     case "toggle_focus_command": {
-      if (hasBlockingSurface(model) || model.saving) return model;
+      // A recorded block is waiting on its task decision. Starting the next
+      // one from a shortcut would answer that question for the user.
+      if (hasBlockingSurface(model) || model.completionDialogOpen || model.saving) return model;
       if (model.activeSession !== null && model.activeSession.state === "running") {
         const sessionId = model.activeSession.id;
         const mode = model.activeSession.mode;
@@ -2222,7 +2241,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       return model;
     }
     case "quick_toggle_command": {
-      if (hasBlockingDialog(model) || model.saving || model.loadState !== "ready") return model;
+      if (hasBlockingDialog(model) || model.completionDialogOpen || model.saving || model.loadState !== "ready") return model;
       if (model.activeSession !== null && model.activeSession.state === "running") {
         const sessionId = model.activeSession.id;
         const mode = model.activeSession.mode;
@@ -2254,6 +2273,17 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
         ];
       }
       return model;
+    }
+    case "space_transport": {
+      if (hasBlockingSurface(model) || model.saving || model.hasWriteError) return model;
+      if (model.activeSession === null) return model;
+      const live = model.activeSession;
+      if (live.state !== "running" && live.state !== "paused") return model;
+      const kind: PendingKind = live.state === "running" ? "timer_pause" : "timer_resume";
+      return [
+        intentModel(model, kind, live.id, "open", EMPTY, live.mode, 0),
+        Cmd.now("intent_now"),
+      ];
     }
     case "quit_command":
       if (hasBlockingDialog(model)) return model;
@@ -2443,7 +2473,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
         pendingClockRollback: at < model.nowMs,
       };
       if (model.pendingKind === "task_create") {
-        const payload = encodeTaskCreate(model.revision, at, model.focusDraftMinutes, model.pendingTitle);
+        const payload = encodeTaskCreate(model.revision, at, model.pendingDurationMinutes, model.pendingTitle);
         return [
           { ...pending, retryPayload: payload },
           Cmd.request("focus.db.task.create", payload, { key: "focus-db", ok: "db_ok", err: "db_err" }),
@@ -2606,13 +2636,18 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       // default itself is authoritative again: at boot, when Settings commits,
       // and once the block it was chosen for has been resolved. Anything else
       // (a task edit, an archive, a pause) leaves the user's choice alone.
+      const resolvedFocusBlock =
+        completedMode === "focus" &&
+        (operation === "timer_cancel" ||
+          operation === "timer_complete_natural" ||
+          operation === "timer_complete_manual");
+      // A break is not the block whose length was chosen, so finishing or
+      // discarding one leaves the next focus block's length alone.
       const draftFollowsDefault =
         operation === "load" ||
         operation === "settings" ||
-        operation === "timer_cancel" ||
-        operation === "timer_complete_natural" ||
-        operation === "timer_complete_manual" ||
-        operation === "task_after_focus";
+        operation === "task_after_focus" ||
+        resolvedFocusBlock;
       const draftMinutes = draftFollowsDefault
         ? clamped(snapshot.settings.focusMinutes, FOCUS_MIN, FOCUS_MAX)
         : clamped(model.focusDraftMinutes, FOCUS_MIN, FOCUS_MAX);

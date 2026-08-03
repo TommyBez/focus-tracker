@@ -22,8 +22,9 @@ heading above the timer.
 - Add, rename, complete, archive, restore, and select tasks, including while a
   block is running: an interruption belongs in the ledger, not in your head.
 - Commit a focus block of any length from 5 to 180 minutes to one task. The
-  25/50/90 presets and a ±5 minute stepper set *this* block; Settings owns the
-  durable default and is the only place a duration is written to SQLite.
+  15/25/50/90 presets and a ±5 minute stepper set *this* block; Settings owns
+  the durable default and is the only place a duration is written to SQLite. A
+  break never consumes the length chosen for the next focus block.
 - Pause, resume, finish, cancel, and recover a block across sleep or relaunch.
 - Configure default focus length, break lengths, daily focus goal, and
   completion sound, each with presets plus a stepper over the full range the
@@ -92,6 +93,11 @@ database is surfaced as a recovery error and is never silently replaced.
 | `⌘,` | Settings |
 | `⌘⇧Space` | Start, pause, or resume the current focus block |
 | `⌘⇧F` | Open or refocus Quick Focus |
+| `Space` | Pause or resume a running block, when no control has focus |
+
+`Space` is a last-resort fallback: a focused control answers its own keys and
+editable text keeps typing, so it only reaches the transport when nothing is
+focused. It never *starts* a block — beginning one is always explicit.
 
 `⌘⇧Space` starts the block at the length currently shown in the chamber, which
 is the persisted default until the stepper or a preset changes it for this

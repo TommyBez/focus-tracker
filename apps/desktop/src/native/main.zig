@@ -1294,6 +1294,46 @@ test "status item exposes a bounded actionable idle menu" {
     }
 }
 
+/// A minimal, valid `FCS2` snapshot body: no tasks, no live session, no
+/// history. Tests that only exercise reducer branches use this instead of a
+/// live SQLite round trip, so they stay pure model tests.
+fn testWriteU32(buffer: []u8, at: *usize, value: u32) void {
+    std.mem.writeInt(u32, buffer[at.*..][0..4], value, .little);
+    at.* += 4;
+}
+
+fn testWriteU64(buffer: []u8, at: *usize, value: u64) void {
+    std.mem.writeInt(u64, buffer[at.*..][0..8], value, .little);
+    at.* += 8;
+}
+
+fn testEmptySnapshot(buffer: []u8, focus_minutes: u32) []const u8 {
+    var at: usize = 0;
+    @memcpy(buffer[0..4], "FCS2");
+    at = 4;
+    testWriteU32(buffer, &at, 2); // protocol version
+    testWriteU64(buffer, &at, 1); // revision
+    testWriteU32(buffer, &at, focus_minutes);
+    testWriteU32(buffer, &at, 5); // short break
+    testWriteU32(buffer, &at, 15); // long break
+    testWriteU32(buffer, &at, 120); // daily goal
+    buffer[at] = 1; // completion sound
+    at += 1;
+    testWriteU64(buffer, &at, 1); // next task id
+    testWriteU32(buffer, &at, 0); // task count
+    buffer[at] = 0; // no active session
+    at += 1;
+    testWriteU32(buffer, &at, 0); // recent session count
+    testWriteU64(buffer, &at, 0); // today focus ms
+    testWriteU32(buffer, &at, 0); // today completed sessions
+    testWriteU32(buffer, &at, 0); // today completed tasks
+    testWriteU32(buffer, &at, 7); // week bucket count
+    buffer[at] = 0; // today weekday
+    at += 1;
+    for (0..7) |_| testWriteU64(buffer, &at, 0);
+    return buffer[0..at];
+}
+
 fn testStatusItemById(state: App.StatusItemState, id: u32) ?native_sdk.TrayMenuItem {
     for (state.items) |item| {
         if (!item.separator and item.id == id) return item;
@@ -2710,4 +2750,104 @@ test "today's panel states the day without contradicting the ledger" {
     stats.todayFocusMs = 200 * 60_000;
     try std.testing.expect(core.todayGoalReached(model));
     try std.testing.expectEqualStrings("Daily goal reached", core.todayGoalRemainingText(model));
+}
+
+test "an unclaimed space bar works the transport and never conjures a block" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+    const task = core.rt.frameCreate(core.DbTask, .{
+        .id = 5,
+        .state = .open,
+        .sortOrder = 0,
+        .estimateMinutes = 25,
+        .createdMs = 10,
+        .updatedMs = 10,
+        .completedMs = 0,
+        .title = "Trim the migration script",
+    });
+    const tasks = core.rt.frameAlloc(*const core.DbTask, 1);
+    tasks[0] = task;
+    model.tasks = tasks;
+    model.selectedTaskId = 5;
+
+    const bare_space = core.keyMsg(.{
+        .key = "space",
+        .shift = false,
+        .control = false,
+        .alt = false,
+        .super = false,
+    });
+    try std.testing.expect(bare_space != null);
+
+    // Idle: the shortcut that starts a block is deliberately the explicit
+    // one. A stray press on empty canvas must not commit focus time.
+    const idle = core.update(model, .space_transport);
+    try std.testing.expectEqual(@as(usize, 0), idle.cmd.len);
+    try std.testing.expectEqual(core.PendingKind.load, idle.model.pendingKind);
+
+    const running = core.rt.frameCreate(core.DbSession, .{
+        .id = 44,
+        .taskId = 5,
+        .mode = .focus,
+        .state = .running,
+        .completionReason = .none,
+        .startedMs = 1_000,
+        .endsMs = 1_501_000,
+        .remainingMs = 1_500_000,
+        .plannedMs = 1_500_000,
+        .focusedMs = 0,
+        .endedMs = 0,
+    });
+    model.activeSession = running;
+    const paused = core.update(model, .space_transport);
+    try std.testing.expectEqual(core.PendingKind.timer_pause, paused.model.pendingKind);
+    try std.testing.expect(paused.cmd.len > 0);
+
+    running.state = .paused;
+    const resumed = core.update(model, .space_transport);
+    try std.testing.expectEqual(core.PendingKind.timer_resume, resumed.model.pendingKind);
+
+    // Modified space keeps belonging to the platform.
+    try std.testing.expect(core.keyMsg(.{
+        .key = "space",
+        .shift = false,
+        .control = false,
+        .alt = false,
+        .super = true,
+    }) == null);
+}
+
+test "a break never consumes the length chosen for the next focus block" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+
+    // Choose 45 for the next focus block, then resolve a BREAK.
+    var chosen = core.update(model, .use_duration_50);
+    chosen = core.update(chosen.model, .shorten_focus);
+    try std.testing.expectEqual(@as(i64, 45), core.focusLengthMinutes(chosen.model));
+
+    var snapshot_buffer: [256]u8 = undefined;
+    const snapshot = testEmptySnapshot(&snapshot_buffer, 25);
+
+    const resolving = core.rt.frameCreate(core.Model, chosen.model.*);
+    resolving.pendingKind = .timer_complete_manual;
+    resolving.pendingMode = .short;
+    const after_break = core.update(resolving, .{ .db_ok = snapshot });
+    try std.testing.expectEqual(core.LoadState.ready, after_break.model.loadState);
+    try std.testing.expectEqual(@as(i64, 45), core.focusLengthMinutes(after_break.model));
+
+    // Resolving the focus block it was chosen for does return to the default.
+    const focus_resolving = core.rt.frameCreate(core.Model, chosen.model.*);
+    focus_resolving.pendingKind = .timer_complete_manual;
+    focus_resolving.pendingMode = .focus;
+    const after_focus = core.update(focus_resolving, .{ .db_ok = snapshot });
+    try std.testing.expectEqual(@as(i64, 25), core.focusLengthMinutes(after_focus.model));
 }

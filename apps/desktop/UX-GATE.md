@@ -36,6 +36,7 @@ database and repeat the persistence-sensitive journeys after relaunch.
 | F10 | Installed artifact | Mount the DMG, drag to Applications, launch the copied app, repeat a short journey, quit cleanly, and verify SQLite integrity |
 | F11 | Block length | Set a non-preset length with the stepper, start it, and confirm the session's planned duration matches without a preference write; confirm Settings still owns the persisted default |
 | F12 | Mid-block capture | Add, rename, complete, and archive other tasks while a block runs; confirm the running task's own row refuses completion and archiving and that the session survives every write |
+| F13 | Completion is never skipped | With a recorded block awaiting its task decision, confirm the transport shortcut and the menu-bar toggle refuse to start the next block |
 
 For every journey record task success, critical errors, recovery success,
 unexpected windows, input-to-feedback latency, focus order, and the final
@@ -157,14 +158,16 @@ own evidence class and does **not** re-attribute the 2026-07-31 journey pass:
 
 - The model contract, all three strict markup checks, and `native validate
   app.zon` pass for the reworked sources.
-- The pure-model native suite grew by six tests covering the local block-length
+- The pure-model native suite grew by eight tests covering the local block-length
   draft, its clamping at both ends of the protocol range, the committing
   Settings steppers, transport ownership of the running task's row, the
-  titlebar gutter clamp, and every Today-panel derivation.
+  titlebar gutter clamp, every Today-panel derivation, the unclaimed-Space
+  transport fallback, and a break leaving the next focus block's length alone.
 - Journeys F1, F3, F4, F6, F7, F11, and F12 were re-driven against a running
   build through real widget input on an isolated database, including a
   first-run empty ledger, a non-preset 35 minute block, mid-block task capture,
-  the break lifecycle, and a Settings stepper commit read back from SQLite.
+  the break lifecycle, a Settings stepper commit read back from SQLite, and
+  F13's refusal to start a block over an unanswered completion.
 - That re-drive used the Linux GTK host, which is a development harness only.
   It proves layout, reachability, semantics, and the model/SQLite round trip;
   it is not macOS visual evidence and does not substitute for F2, F5, F8, F9,

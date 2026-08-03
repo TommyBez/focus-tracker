@@ -390,6 +390,7 @@
                             on-press="shorten_focus"
                           >-5</button>
                           <toggle-group label="Focus length presets" gap="2">
+                            <toggle-button size="sm" selected="{focusLengthMinutes == 15}" on-toggle="use_duration_15">15 min</toggle-button>
                             <toggle-button size="sm" selected="{focusLengthMinutes == 25}" on-toggle="use_duration_25">25 min</toggle-button>
                             <toggle-button size="sm" selected="{focusLengthMinutes == 50}" on-toggle="use_duration_50">50 min</toggle-button>
                             <toggle-button size="sm" selected="{focusLengthMinutes == 90}" on-toggle="use_duration_90">90 min</toggle-button>
