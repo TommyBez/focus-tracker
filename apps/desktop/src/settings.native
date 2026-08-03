@@ -1,102 +1,100 @@
 <!--
-  Preferences commit immediately through the authoritative SQLite snapshot.
-  The fixed-size macOS window keeps the controls dense, grouped, and calm.
+  Cobalt Chronograph preferences: one editorial sheet, not a dashboard.
+  Every control commits immediately through the authoritative SQLite snapshot.
 -->
-<column background="background" grow="1" padding="16" gap="12" label="Focus Tracker settings">
-  <!--
-    The cards hug their content instead of absorbing the window's spare
-    height, so the transient "Saving" row below never resizes them.
-  -->
-  <row gap="16" cross="stretch">
-    <column
-      grow="1"
-      background="surface_subtle"
-      radius="lg"
-      padding="16"
-      gap="12"
-      label="Timer default settings"
-    >
-      <column gap="4">
-        <text><span weight="medium">Timer defaults</span></text>
-        <text size="sm" foreground="text_muted">Default lengths for focus and breaks.</text>
-      </column>
+<column background="background" grow="1" padding="24" gap="0" label="Focus Tracker settings">
+  <row gap="20" cross="center">
+    <column grow="1" gap="5">
+      <text size="sm" foreground="accent"><span weight="medium">PREFERENCES</span></text>
+      <text size="heading"><span weight="medium">Timer and daily goal</span></text>
+      <text size="sm" foreground="text_muted">Defaults apply to new blocks. Today changes only the next block.</text>
+    </column>
+    <column cross="end" gap="4">
+      <text size="sm" foreground="text_muted">APPLIES TO</text>
+      <text size="sm"><span weight="medium">New focus blocks</span></text>
+    </column>
+  </row>
 
-      <separator />
+  <spacer height="18" />
+  <separator />
 
-      <row gap="12" cross="center">
-        <column grow="1" gap="4">
+  <row gap="24" padding="16" cross="start" label="Timer defaults">
+    <column width="116" gap="4">
+      <text size="sm" foreground="accent"><span weight="medium">01 / TIMER</span></text>
+      <text size="sm" foreground="text_muted">Block lengths</text>
+    </column>
+
+    <column grow="1" gap="12">
+      <row gap="16" cross="center">
+        <column grow="1" gap="3">
           <text><span weight="medium">Focus block</span></text>
-          <text size="sm" foreground="text_muted">Default work interval</text>
+          <text size="sm" foreground="text_muted">The starting length for a new work interval</text>
         </column>
         <toggle-group label="Default focus block length" gap="2">
-          <toggle-button size="sm" selected="{settingsFocusMinutes == 25}" autofocus="{settingsFocusMinutes == 25}" disabled="{saving or hasWriteError}" on-toggle="set_duration_25">25 min</toggle-button>
-          <toggle-button size="sm" selected="{settingsFocusMinutes == 50}" autofocus="{settingsFocusMinutes == 50}" disabled="{saving or hasWriteError}" on-toggle="set_duration_50">50 min</toggle-button>
-          <toggle-button size="sm" selected="{settingsFocusMinutes == 90}" autofocus="{settingsFocusMinutes == 90}" disabled="{saving or hasWriteError}" on-toggle="set_duration_90">90 min</toggle-button>
+          <toggle-button size="sm" selected="{settingsFocusMinutes == 15}" autofocus="{settingsFocusMinutes == 15}" disabled="{saving or hasWriteError}" on-toggle="set_default_duration_15">15</toggle-button>
+          <toggle-button size="sm" selected="{settingsFocusMinutes == 25}" autofocus="{settingsFocusMinutes == 25}" disabled="{saving or hasWriteError}" on-toggle="set_default_duration_25">25</toggle-button>
+          <toggle-button size="sm" selected="{settingsFocusMinutes == 50}" autofocus="{settingsFocusMinutes == 50}" disabled="{saving or hasWriteError}" on-toggle="set_default_duration_50">50</toggle-button>
+          <toggle-button size="sm" selected="{settingsFocusMinutes == 90}" autofocus="{settingsFocusMinutes == 90}" disabled="{saving or hasWriteError}" on-toggle="set_default_duration_90">90 min</toggle-button>
         </toggle-group>
       </row>
 
       <separator />
 
-      <row gap="12" cross="center">
-        <column grow="1" gap="4">
+      <row gap="16" cross="center">
+        <column grow="1" gap="3">
           <text><span weight="medium">Short break</span></text>
-          <text size="sm" foreground="text_muted">After each focus block</text>
+          <text size="sm" foreground="text_muted">Break after a regular focus block</text>
         </column>
         <toggle-group label="Short break length" gap="2">
-          <toggle-button size="sm" selected="{shortBreakMinutes == 5}" disabled="{saving or hasWriteError}" on-toggle="set_short_break_5">5 min</toggle-button>
-          <toggle-button size="sm" selected="{shortBreakMinutes == 10}" disabled="{saving or hasWriteError}" on-toggle="set_short_break_10">10 min</toggle-button>
+          <toggle-button size="sm" selected="{shortBreakMinutes == 5}" disabled="{saving or hasWriteError}" on-toggle="set_short_break_5">5</toggle-button>
+          <toggle-button size="sm" selected="{shortBreakMinutes == 10}" disabled="{saving or hasWriteError}" on-toggle="set_short_break_10">10</toggle-button>
           <toggle-button size="sm" selected="{shortBreakMinutes == 15}" disabled="{saving or hasWriteError}" on-toggle="set_short_break_15">15 min</toggle-button>
         </toggle-group>
       </row>
 
       <separator />
 
-      <row gap="12" cross="center">
-        <column grow="1" gap="4">
+      <row gap="16" cross="center">
+        <column grow="1" gap="3">
           <text><span weight="medium">Long break</span></text>
-          <text size="sm" foreground="text_muted">After every fourth block</text>
+          <text size="sm" foreground="text_muted">A longer reset after every fourth block</text>
         </column>
         <toggle-group label="Long break length" gap="2">
-          <toggle-button size="sm" selected="{longBreakMinutes == 15}" disabled="{saving or hasWriteError}" on-toggle="set_long_break_15">15 min</toggle-button>
-          <toggle-button size="sm" selected="{longBreakMinutes == 20}" disabled="{saving or hasWriteError}" on-toggle="set_long_break_20">20 min</toggle-button>
+          <toggle-button size="sm" selected="{longBreakMinutes == 15}" disabled="{saving or hasWriteError}" on-toggle="set_long_break_15">15</toggle-button>
+          <toggle-button size="sm" selected="{longBreakMinutes == 20}" disabled="{saving or hasWriteError}" on-toggle="set_long_break_20">20</toggle-button>
           <toggle-button size="sm" selected="{longBreakMinutes == 30}" disabled="{saving or hasWriteError}" on-toggle="set_long_break_30">30 min</toggle-button>
         </toggle-group>
       </row>
     </column>
+  </row>
 
-    <column
-      width="220"
-      background="surface_subtle"
-      radius="lg"
-      padding="16"
-      gap="12"
-      label="Daily settings"
-    >
-      <column gap="4">
-        <text><span weight="medium">Daily</span></text>
-        <text size="sm" foreground="text_muted">Goal and notification settings.</text>
-      </column>
+  <separator />
 
-      <separator />
+  <row gap="24" padding="16" cross="start" label="Daily settings">
+    <column width="116" gap="4">
+      <text size="sm" foreground="accent"><span weight="medium">02 / DAILY</span></text>
+      <text size="sm" foreground="text_muted">Goal and sound</text>
+    </column>
 
-      <column gap="8">
-        <column gap="4">
-          <text><span weight="medium">Focus goal</span></text>
-          <text size="sm" foreground="text_muted">Minutes per day</text>
+    <column grow="1" gap="12">
+      <row gap="16" cross="center">
+        <column grow="1" gap="3">
+          <text><span weight="medium">Daily focus goal</span></text>
+          <text size="sm" foreground="text_muted">The target shown across Today and Ledger</text>
         </column>
         <toggle-group label="Daily focus goal" gap="2">
           <toggle-button size="sm" selected="{dailyGoalMinutes == 60}" disabled="{saving or hasWriteError}" on-toggle="set_daily_goal_60">1 h</toggle-button>
           <toggle-button size="sm" selected="{dailyGoalMinutes == 120}" disabled="{saving or hasWriteError}" on-toggle="set_daily_goal_120">2 h</toggle-button>
           <toggle-button size="sm" selected="{dailyGoalMinutes == 180}" disabled="{saving or hasWriteError}" on-toggle="set_daily_goal_180">3 h</toggle-button>
         </toggle-group>
-      </column>
+      </row>
 
       <separator />
 
-      <row gap="12" cross="center">
-        <column grow="1" gap="4">
+      <row gap="16" cross="center">
+        <column grow="1" gap="3">
           <text><span weight="medium">Completion sound</span></text>
-          <text size="sm" foreground="text_muted">Chime when time ends</text>
+          <text size="sm" foreground="text_muted">Play a quiet chime when the clock reaches zero</text>
         </column>
         <switch
           key="{soundSwitchKey}"
@@ -109,20 +107,24 @@
     </column>
   </row>
 
-  <if test="{saving or hasWriteError}">
+  <spacer grow="1" />
+  <separator />
+
+  <!-- The stable footer prevents save feedback from shifting the form. -->
+  <row height="36" gap="8" cross="center" label="Settings save status">
     <if test="{saving}">
-      <row height="32" gap="8" cross="center" label="Saving settings">
-        <spinner />
-        <text size="sm" foreground="text_muted">Saving</text>
-      </row>
+      <spinner />
+      <text size="sm" foreground="text_muted">Saving changes…</text>
     </if>
-    <else>
-      <row height="32" gap="8" cross="center" label="Settings were not saved">
-        <text size="sm" foreground="destructive"><span weight="medium">Unable to save</span></text>
-        <text size="sm" foreground="text_muted" grow="1" overflow="ellipsis">{writeErrorText}</text>
-        <button size="sm" variant="ghost" on-press="discard_failed_change">Discard</button>
-        <button size="sm" variant="outline" icon="refresh-cw" on-press="retry_save">Retry</button>
-      </row>
-    </else>
-  </if>
+    <if test="{hasWriteError}">
+      <text size="sm" foreground="destructive"><span weight="medium">Unable to save</span></text>
+      <text size="sm" foreground="text_muted" grow="1" overflow="ellipsis">{writeErrorText}</text>
+      <button size="sm" variant="ghost" on-press="discard_failed_change">Discard</button>
+      <button size="sm" variant="outline" icon="refresh-cw" on-press="retry_save">Retry</button>
+    </if>
+    <if test="{not saving and not hasWriteError}">
+      <text size="sm" foreground="accent">●</text>
+      <text size="sm" foreground="text_muted">Changes save automatically</text>
+    </if>
+  </row>
 </column>

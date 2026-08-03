@@ -1,4 +1,4 @@
-//! Cobalt Instrument design tokens.
+//! Cobalt Chronograph design tokens.
 //!
 //! This module deliberately starts from Native SDK's house theme for every
 //! live appearance. It only adjusts the product's quiet visual register:
@@ -46,14 +46,12 @@ pub fn tokens(options: Options) canvas.DesignTokens {
 
     resolved = resolved.withOverrides(.{
         .typography = .{
-            // Retain the restrained house ladder; give instrument readouts
-            // one clearer display step without changing the bundled face.
             .body_size = 14,
             .label_size = 13,
             .title_size = 20,
             .button_size = 13,
-            .heading_size = 28,
-            .display_size = 56,
+            .heading_size = 30,
+            .display_size = 64,
         },
         .spacing = .{
             .xs = 4,
@@ -63,12 +61,10 @@ pub fn tokens(options: Options) canvas.DesignTokens {
             .xl = 28,
         },
         .radius = .{
-            // Tighter AppKit-like controls, with larger radii reserved for
-            // genuine instruments instead of turning every control into a pill.
             .sm = 4,
-            .md = 6,
-            .lg = 10,
-            .xl = 14,
+            .md = 7,
+            .lg = 12,
+            .xl = 18,
         },
     });
 
@@ -76,16 +72,15 @@ pub fn tokens(options: Options) canvas.DesignTokens {
     // neutral from the active house palette instead of pinning light colors
     // into dark mode.
     if (contrast == .standard) {
+        const brand = switch (scheme) {
+            .light => options.accent orelse canvas.Color.rgb8(49, 86, 217),
+            .dark => canvas.Color.rgb8(110, 139, 255),
+        };
         resolved = resolved.withOverrides(.{
-            .colors = quietSurfaceOverrides(resolved.colors, scheme),
+            .colors = chronographPalette(scheme, brand),
         });
 
-        // Native SDK's semantic bundle derives readable knockout ink, a
-        // scheme-aware focus ring, and the slider active range. This is the
-        // same safe accent path used by app.zon's `theme_accent` support.
-        if (options.accent) |accent| {
-            resolved = resolved.withOverrides(canvas.accentOverrides(accent, scheme));
-        }
+        resolved = resolved.withOverrides(canvas.accentOverrides(brand, scheme));
 
         // Resolve control colors only after the semantic accent bundle so
         // progress and focus visuals follow the caller's live accent.
@@ -115,10 +110,12 @@ pub fn tokens(options: Options) canvas.DesignTokens {
                 .button_destructive = .{ .radius = 6 },
                 .toggle_button = .{ .radius = 6 },
                 .tabs = .{
-                    .border = control_border,
-                    .radius = 8,
-                    .stroke_width = 1,
+                    .background = canvas.Color.rgba8(0, 0, 0, 0),
+                    .border = canvas.Color.rgba8(0, 0, 0, 0),
+                    .radius = 0,
+                    .stroke_width = 0,
                 },
+                .tabs_indicator = .underline,
                 .text_field = .{
                     .background = colors.background,
                     .border = control_border,
@@ -140,7 +137,13 @@ pub fn tokens(options: Options) canvas.DesignTokens {
                     .active_background = colors.accent,
                     .radius = 2,
                 },
-                .list_item = .{ .radius = 5 },
+                .list_item = .{
+                    .active_background = withAlpha(colors.accent, switch (scheme) {
+                        .light => 0.12,
+                        .dark => 0.20,
+                    }),
+                    .radius = 7,
+                },
             },
         });
     }
@@ -148,31 +151,39 @@ pub fn tokens(options: Options) canvas.DesignTokens {
     return resolved;
 }
 
-fn quietSurfaceOverrides(
-    colors: canvas.ColorTokens,
+fn chronographPalette(
     scheme: canvas.ColorScheme,
+    brand: canvas.Color,
 ) canvas.ColorTokenOverrides {
-    const surface_ink: f32 = switch (scheme) {
-        .light => 0.012,
-        .dark => 0.050,
-    };
-    const subtle_ink: f32 = switch (scheme) {
-        .light => 0.035,
-        .dark => 0.100,
-    };
-    const border_alpha: f32 = switch (scheme) {
-        .light => 0.14,
-        .dark => 0.18,
-    };
-
-    return .{
-        .surface = mix(colors.background, colors.text, surface_ink),
-        .surface_subtle = mix(colors.background, colors.text, subtle_ink),
-        .border = withAlpha(colors.text, border_alpha),
-        .text_muted = mix(colors.background, colors.text, switch (scheme) {
-            .light => 0.60,
-            .dark => 0.70,
-        }),
+    return switch (scheme) {
+        .light => .{
+            .background = canvas.Color.rgb8(247, 246, 242),
+            .surface = canvas.Color.rgb8(255, 255, 255),
+            .surface_subtle = canvas.Color.rgb8(238, 237, 232),
+            .surface_pressed = canvas.Color.rgb8(222, 225, 234),
+            .text = canvas.Color.rgb8(23, 25, 29),
+            .text_muted = canvas.Color.rgb8(101, 103, 110),
+            .border = canvas.Color.rgb8(216, 214, 207),
+            .accent = brand,
+            .accent_text = canvas.Color.rgb8(255, 255, 255),
+            .focus_ring = brand,
+            .shadow = canvas.Color.rgba8(23, 25, 29, 28),
+            .disabled = canvas.Color.rgb8(232, 231, 226),
+        },
+        .dark => .{
+            .background = canvas.Color.rgb8(16, 17, 20),
+            .surface = canvas.Color.rgb8(23, 25, 30),
+            .surface_subtle = canvas.Color.rgb8(32, 35, 42),
+            .surface_pressed = canvas.Color.rgb8(45, 50, 61),
+            .text = canvas.Color.rgb8(245, 246, 248),
+            .text_muted = canvas.Color.rgb8(162, 168, 179),
+            .border = canvas.Color.rgb8(54, 58, 68),
+            .accent = brand,
+            .accent_text = canvas.Color.rgb8(10, 13, 22),
+            .focus_ring = brand,
+            .shadow = canvas.Color.rgba8(0, 0, 0, 160),
+            .disabled = canvas.Color.rgb8(39, 42, 49),
+        },
     };
 }
 
@@ -226,10 +237,10 @@ test "standard appearance applies accent and native control refinements" {
     const dark = tokens(.{ .appearance = .{ .color_scheme = .dark } });
 
     try std.testing.expectEqualDeep(base.colors.info, actual.colors.accent);
-    try std.testing.expectEqualDeep(base.colors.background, actual.colors.background);
-    try std.testing.expectEqualDeep(base.colors.surface_pressed, actual.colors.surface_pressed);
-    try std.testing.expectEqual(@as(f32, 0.14), actual.colors.border.a);
-    try std.testing.expectEqual(@as(f32, 0.18), dark.colors.border.a);
+    try std.testing.expectEqualDeep(canvas.Color.rgb8(247, 246, 242), actual.colors.background);
+    try std.testing.expectEqualDeep(canvas.Color.rgb8(222, 225, 234), actual.colors.surface_pressed);
+    try std.testing.expectEqualDeep(canvas.Color.rgb8(216, 214, 207), actual.colors.border);
+    try std.testing.expectEqualDeep(canvas.Color.rgb8(54, 58, 68), dark.colors.border);
     try std.testing.expectEqual(@as(f32, 1.5), actual.stroke.focus);
     try std.testing.expectEqual(@as(f32, 1), actual.stroke.focus_offset);
     for ([_]f32{
@@ -241,10 +252,9 @@ test "standard appearance applies accent and native control refinements" {
         actual.controls.button_destructive.radius.?,
         actual.controls.toggle_button.radius.?,
     }) |radius| try std.testing.expectEqual(@as(f32, 6), radius);
-    try std.testing.expectEqual(@as(f32, 8), actual.controls.tabs.radius.?);
-    try std.testing.expectEqual(@as(f32, 0.44), actual.controls.tabs.border.?.a);
-    try std.testing.expectEqual(@as(f32, 0.36), dark.controls.tabs.border.?.a);
-    try std.testing.expectEqual(@as(f32, 1), actual.controls.tabs.stroke_width.?);
+    try std.testing.expectEqual(@as(f32, 0), actual.controls.tabs.radius.?);
+    try std.testing.expectEqual(.underline, actual.controls.tabs_indicator);
+    try std.testing.expectEqual(@as(f32, 0), actual.controls.tabs.stroke_width.?);
     try std.testing.expectEqual(@as(f32, 5), actual.controls.text_field.radius.?);
     try std.testing.expectEqual(@as(f32, 0.44), actual.controls.text_field.border.?.a);
     try std.testing.expectEqual(@as(f32, 0.36), dark.controls.text_field.border.?.a);
@@ -259,5 +269,5 @@ test "standard appearance applies accent and native control refinements" {
     );
     try std.testing.expectEqualDeep(actual.colors.accent, actual.controls.progress.active_background.?);
     try std.testing.expectEqual(@as(f32, 2), actual.controls.progress.radius.?);
-    try std.testing.expectEqual(@as(f32, 5), actual.controls.list_item.radius.?);
+    try std.testing.expectEqual(@as(f32, 7), actual.controls.list_item.radius.?);
 }

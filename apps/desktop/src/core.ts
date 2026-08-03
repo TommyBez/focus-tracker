@@ -121,6 +121,7 @@ export interface Model {
   readonly saving: boolean;
   readonly revision: number;
   readonly settings: DbSettings;
+  readonly focusMinutesOverride: number;
   readonly tasks: readonly DbTask[];
   readonly activeSession: DbSession | null;
   readonly recentSessions: readonly DbSession[];
@@ -198,7 +199,13 @@ export type Msg =
   | { readonly kind: "set_duration_25" }
   | { readonly kind: "set_duration_50" }
   | { readonly kind: "set_duration_90" }
+  | { readonly kind: "set_duration_15" }
+  | { readonly kind: "set_default_duration_15" }
+  | { readonly kind: "set_default_duration_25" }
+  | { readonly kind: "set_default_duration_50" }
+  | { readonly kind: "set_default_duration_90" }
   | { readonly kind: "start_focus" }
+  | { readonly kind: "start_unassigned_focus" }
   | { readonly kind: "pause_focus" }
   | { readonly kind: "resume_focus" }
   | { readonly kind: "request_end_focus" }
@@ -286,6 +293,7 @@ export const appearanceMsg = "appearance_changed";
 export const viewUnbound = [
   "revision",
   "settings",
+  "focusMinutesOverride",
   "tasks",
   "activeSession",
   "recentSessions",
@@ -364,8 +372,8 @@ export const viewUnbound = [
 
 const EMPTY = asciiBytes("");
 const TITLE_CAPACITY = 240;
-const DEFAULT_PANE = 0.27;
-const FOCUS_PANE = 0.24;
+const DEFAULT_PANE = 0.30;
+const FOCUS_PANE = 0.21;
 const MAX_SAFE_TIME = 9007199254740991;
 
 function emptyEditor(): TextEditState {
@@ -431,6 +439,7 @@ function baseModel(): Model {
     saving: false,
     revision: 0,
     settings: defaultSettings(),
+    focusMinutesOverride: 0,
     tasks: [],
     activeSession: null,
     recentSessions: [],
@@ -957,8 +966,7 @@ export function quickCanStart(model: Model): boolean {
     !model.saving &&
     !model.hasWriteError &&
     !hasBlockingDialog(model) &&
-    model.activeSession === null &&
-    eligibleTask(model, model.selectedTaskId)
+    model.activeSession === null
   );
 }
 
@@ -966,12 +974,8 @@ export function quickControlsDisabled(model: Model): boolean {
   return model.saving || model.hasWriteError || hasBlockingDialog(model);
 }
 
-export function quickStartLabel(model: Model): Bytes {
-  return asciiBytes(`Start ${model.settings.focusMinutes} minutes`);
-}
-
 export function selectedFocusIntervalLabel(model: Model): Bytes {
-  return asciiBytes(`Selected focus interval, ${model.settings.focusMinutes} minutes`);
+  return asciiBytes(`Selected focus interval, ${chosenFocusMinutes(model)} minutes`);
 }
 
 export function mainEndDialogOpen(model: Model): boolean {
@@ -1028,6 +1032,7 @@ export function focusTaskTitle(model: Model): Bytes {
     return modeTitle(model.activeSession.mode);
   }
   if (model.completionTaskId > 0) return taskTitleFor(model.tasks, model.completionTaskId);
+  if (model.completionDialogOpen) return asciiBytes("Unassigned focus block");
   if (model.taskFilter !== "open") return asciiBytes("Choose a focus task");
   const selected = taskById(model.tasks, model.selectedTaskId);
   return selected === null || selected.state !== "open" ? asciiBytes("Choose a focus task") : selected.title;
@@ -1035,7 +1040,13 @@ export function focusTaskTitle(model: Model): Bytes {
 
 export function focusLengthMinutes(model: Model): number {
   if (model.activeSession !== null) return intDiv(model.activeSession.plannedMs, 60000);
-  return model.settings.focusMinutes;
+  return chosenFocusMinutes(model);
+}
+
+function chosenFocusMinutes(model: Model): number {
+  // A block override is intentionally local UI state: Settings remains the
+  // only path that changes the persisted default for future blocks.
+  return model.focusMinutesOverride > 0 ? model.focusMinutesOverride : model.settings.focusMinutes;
 }
 
 export function settingsFocusMinutes(model: Model): number {
@@ -1247,6 +1258,32 @@ export function todayGoalProgress(model: Model): number {
   return fraction;
 }
 
+export function todayFocusedText(model: Model): Bytes {
+  if (model.stats.todayFocusMs > 0 && model.stats.todayFocusMs < 60000) return asciiBytes("<1 min");
+  return asciiBytes(`${intDiv(model.stats.todayFocusMs, 60000)} min`);
+}
+
+export function todayBlocksText(model: Model): Bytes {
+  const count = model.stats.todayCompletedSessions;
+  return count === 1 ? asciiBytes("1 block") : asciiBytes(`${count} blocks`);
+}
+
+export function todayTasksText(model: Model): Bytes {
+  const count = model.stats.todayCompletedTasks;
+  return count === 1 ? asciiBytes("1 task") : asciiBytes(`${count} tasks`);
+}
+
+export function goalRemainingText(model: Model): Bytes {
+  const focusedMinutes = intDiv(model.stats.todayFocusMs, 60000);
+  const remaining = model.settings.dailyGoalMinutes - focusedMinutes;
+  if (remaining <= 0) return asciiBytes("Daily goal reached");
+  return asciiBytes(`${remaining} min to daily goal`);
+}
+
+export function completionHasTask(model: Model): boolean {
+  return model.completionTaskId > 0 && eligibleTask(model, model.completionTaskId);
+}
+
 export function weekSessionText(model: Model): Bytes {
   const count = historySessions(model).length;
   return count === 1 ? asciiBytes("1 recent block") : asciiBytes(`${count} recent blocks`);
@@ -1308,6 +1345,13 @@ export function commandMsg(name: string): Msg | null {
 
 export function keyMsg(key: KeyEvent): Msg | null {
   if (key.key === "escape") return { kind: "escape_pressed" };
+  if (
+    key.key === "space" &&
+    !key.shift &&
+    !key.control &&
+    !key.alt &&
+    !key.super
+  ) return { kind: "toggle_focus_command" };
   return null;
 }
 
@@ -1328,10 +1372,12 @@ function startsAuthoritativeWrite(msg: Msg): boolean {
     case "restore_task":
     case "confirm_purge_task":
     case "undo_delete":
-    case "set_duration_25":
-    case "set_duration_50":
-    case "set_duration_90":
+    case "set_default_duration_15":
+    case "set_default_duration_25":
+    case "set_default_duration_50":
+    case "set_default_duration_90":
     case "start_focus":
+    case "start_unassigned_focus":
     case "pause_focus":
     case "resume_focus":
     case "finish_focus_now":
@@ -1378,7 +1424,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       const title = model.taskDraftEditor.text.trim();
       if (title.length === 0) return model;
       return [
-        intentModel({ ...model, startAutofocus: false }, "task_create", 0, "open", title, "focus", model.settings.focusMinutes),
+        intentModel({ ...model, startAutofocus: false }, "task_create", 0, "open", title, "focus", chosenFocusMinutes(model)),
         Cmd.now("intent_now"),
       ];
     }
@@ -1444,7 +1490,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
         taskFilter: "open",
       };
       return [
-        intentModel(selected, "timer_start", msg.id, "open", EMPTY, "focus", model.settings.focusMinutes),
+        intentModel(selected, "timer_start", msg.id, "open", EMPTY, "focus", chosenFocusMinutes(model)),
         Cmd.now("intent_now"),
       ];
     }
@@ -1600,24 +1646,26 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
     }
     case "dismiss_undo":
       return { ...model, undoTaskId: 0, undoTaskTitle: EMPTY, undoTaskState: "open" };
+    case "set_duration_15":
+      return model.focusMinutesOverride === 15 ? model : { ...model, focusMinutesOverride: 15 };
     case "set_duration_25":
-      if (model.saving || model.settings.focusMinutes === 25) return model;
-      return [
-        settingsIntentModel(model, { ...model.settings, focusMinutes: 25 }),
-        Cmd.now("intent_now"),
-      ];
+      return model.focusMinutesOverride === 25 ? model : { ...model, focusMinutesOverride: 25 };
     case "set_duration_50":
-      if (model.saving || model.settings.focusMinutes === 50) return model;
-      return [
-        settingsIntentModel(model, { ...model.settings, focusMinutes: 50 }),
-        Cmd.now("intent_now"),
-      ];
+      return model.focusMinutesOverride === 50 ? model : { ...model, focusMinutesOverride: 50 };
     case "set_duration_90":
+      return model.focusMinutesOverride === 90 ? model : { ...model, focusMinutesOverride: 90 };
+    case "set_default_duration_15":
+      if (model.saving || model.settings.focusMinutes === 15) return model;
+      return [settingsIntentModel(model, { ...model.settings, focusMinutes: 15 }), Cmd.now("intent_now")];
+    case "set_default_duration_25":
+      if (model.saving || model.settings.focusMinutes === 25) return model;
+      return [settingsIntentModel(model, { ...model.settings, focusMinutes: 25 }), Cmd.now("intent_now")];
+    case "set_default_duration_50":
+      if (model.saving || model.settings.focusMinutes === 50) return model;
+      return [settingsIntentModel(model, { ...model.settings, focusMinutes: 50 }), Cmd.now("intent_now")];
+    case "set_default_duration_90":
       if (model.saving || model.settings.focusMinutes === 90) return model;
-      return [
-        settingsIntentModel(model, { ...model.settings, focusMinutes: 90 }),
-        Cmd.now("intent_now"),
-      ];
+      return [settingsIntentModel(model, { ...model.settings, focusMinutes: 90 }), Cmd.now("intent_now")];
     case "start_focus":
       if (model.saving || hasBlockingDialog(model) || model.activeSession !== null || !eligibleTask(model, model.selectedTaskId)) return model;
       return [
@@ -1628,7 +1676,21 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
           "open",
           EMPTY,
           "focus",
-          model.settings.focusMinutes,
+          chosenFocusMinutes(model),
+        ),
+        Cmd.now("intent_now"),
+      ];
+    case "start_unassigned_focus":
+      if (model.saving || hasBlockingDialog(model) || model.activeSession !== null || model.loadState !== "ready") return model;
+      return [
+        intentModel(
+          { ...model, section: "today", taskFilter: "open" },
+          "timer_start",
+          0,
+          "open",
+          EMPTY,
+          "focus",
+          chosenFocusMinutes(model),
         ),
         Cmd.now("intent_now"),
       ];
@@ -1911,8 +1973,8 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
     case "quit_app":
       return [model, Cmd.quitApp()];
     case "pane_resized": {
-      const low = msg.fraction < 0.24 ? 0.24 : msg.fraction;
-      const high = low > 0.48 ? 0.48 : low;
+      const low = msg.fraction < 0.20 ? 0.20 : msg.fraction;
+      const high = low > 0.42 ? 0.42 : low;
       return { ...model, paneFraction: high };
     }
     case "new_task_command": {
@@ -1939,7 +2001,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       if (hasBlockingSurface(model)) return model;
       return { ...model, section: "ledger" };
     case "toggle_focus_command": {
-      if (hasBlockingSurface(model) || model.saving) return model;
+      if (hasBlockingSurface(model) || model.completionDialogOpen || model.saving) return model;
       if (model.activeSession !== null && model.activeSession.state === "running") {
         const sessionId = model.activeSession.id;
         const mode = model.activeSession.mode;
@@ -1965,7 +2027,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
             "open",
             EMPTY,
             "focus",
-            model.settings.focusMinutes,
+            chosenFocusMinutes(model),
           ),
           Cmd.now("intent_now"),
         ];
@@ -1973,7 +2035,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       return model;
     }
     case "quick_toggle_command": {
-      if (hasBlockingDialog(model) || model.saving || model.loadState !== "ready") return model;
+      if (hasBlockingDialog(model) || model.completionDialogOpen || model.saving || model.loadState !== "ready") return model;
       if (model.activeSession !== null && model.activeSession.state === "running") {
         const sessionId = model.activeSession.id;
         const mode = model.activeSession.mode;
@@ -1999,7 +2061,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
             "open",
             EMPTY,
             "focus",
-            model.settings.focusMinutes,
+            chosenFocusMinutes(model),
           ),
           Cmd.now("intent_now"),
         ];
@@ -2194,7 +2256,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
         pendingClockRollback: at < model.nowMs,
       };
       if (model.pendingKind === "task_create") {
-        const payload = encodeTaskCreate(model.revision, at, model.settings.focusMinutes, model.pendingTitle);
+        const payload = encodeTaskCreate(model.revision, at, model.pendingDurationMinutes, model.pendingTitle);
         return [
           { ...pending, retryPayload: payload },
           Cmd.request("focus.db.task.create", payload, { key: "focus-db", ok: "db_ok", err: "db_err" }),
@@ -2486,6 +2548,10 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       if (operation === "timer_cancel") {
         next = {
           ...next,
+          // A break does not consume the duration chosen for the next focus
+          // block. Only cancelling a focus block clears that one-shot choice.
+          focusMinutesOverride:
+            completedMode === "focus" ? 0 : next.focusMinutesOverride,
           paneFraction: DEFAULT_PANE,
           endDialogOpen: false,
           completionDialogOpen: false,
@@ -2502,6 +2568,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
         if (completed !== null) completedSessionId = completed.id;
         next = {
           ...next,
+          focusMinutesOverride: wasFocus ? 0 : next.focusMinutesOverride,
           quickWindowOpen:
             operation === "timer_complete_natural" ? true : next.quickWindowOpen,
           settingsWindowOpen:

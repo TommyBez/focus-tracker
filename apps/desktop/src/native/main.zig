@@ -295,7 +295,7 @@ fn modelWindows(model: *const Model, scratch: *App.WindowsScratch) []const App.W
             .canvas_label = settings_canvas_label,
             .title = "Settings",
             .width = 680,
-            .height = 296,
+            .height = 500,
             .resizable = false,
             .activate_on_show = true,
             .on_close = .close_settings,
@@ -307,8 +307,8 @@ fn modelWindows(model: *const Model, scratch: *App.WindowsScratch) []const App.W
             .label = quick_window_label,
             .canvas_label = quick_canvas_label,
             .title = "Quick Focus",
-            .width = 392,
-            .height = 392,
+            .width = 440,
+            .height = 520,
             .resizable = false,
             .always_on_top = true,
             .activate_on_show = true,
@@ -1465,6 +1465,8 @@ test "model-declared secondary windows stay mutually exclusive" {
     try std.testing.expectEqual(@as(usize, 1), windows.len);
     try std.testing.expectEqualStrings(quick_window_label, windows[0].label);
     try std.testing.expectEqualStrings(quick_canvas_label, windows[0].canvas_label);
+    try std.testing.expectEqual(@as(f32, 440), windows[0].width);
+    try std.testing.expectEqual(@as(f32, 520), windows[0].height);
     try std.testing.expect(windows[0].always_on_top);
     try std.testing.expect(!windows[0].resizable);
 
@@ -1474,6 +1476,8 @@ test "model-declared secondary windows stay mutually exclusive" {
     windows = modelWindows(opened_settings.model, &scratch);
     try std.testing.expectEqual(@as(usize, 1), windows.len);
     try std.testing.expectEqualStrings(settings_window_label, windows[0].label);
+    try std.testing.expectEqual(@as(f32, 680), windows[0].width);
+    try std.testing.expectEqual(@as(f32, 500), windows[0].height);
 
     const reopened_quick = core.update(opened_settings.model, .open_quick);
     try std.testing.expect(reopened_quick.model.quickWindowOpen);
@@ -2058,16 +2062,60 @@ test "new task command focuses the composer without dropping task selection" {
     try std.testing.expect(core.quickComposerAutofocus(quick_armed.model));
 }
 
-test "settings keep the persisted default visible during an active session" {
+test "block duration presets stay transient while Settings persists the default" {
     core.rt.resetAll();
     defer core.rt.resetAll();
 
     const seed = core.initialModel().model;
     const model = core.rt.frameCreate(core.Model, seed.*);
     model.loadState = .ready;
+    model.pendingKind = .none;
     const settings = core.rt.frameCreate(core.DbSettings, model.settings.*);
     settings.focusMinutes = 50;
     model.settings = settings;
+
+    const presets = [_]struct {
+        message: core.Msg,
+        minutes: i64,
+    }{
+        .{ .message = .set_duration_15, .minutes = 15 },
+        .{ .message = .set_duration_25, .minutes = 25 },
+        .{ .message = .set_duration_50, .minutes = 50 },
+        .{ .message = .set_duration_90, .minutes = 90 },
+    };
+    var preset_model: *const core.Model = model;
+    for (presets) |preset| {
+        const changed = core.update(preset_model, preset.message);
+        try std.testing.expectEqual(preset.minutes, core.focusLengthMinutes(changed.model));
+        try std.testing.expectEqual(preset.minutes, changed.model.focusMinutesOverride);
+        try std.testing.expectEqual(@as(i64, 50), core.settingsFocusMinutes(changed.model));
+        try std.testing.expectEqual(core.PendingKind.none, changed.model.pendingKind);
+        try std.testing.expect(!changed.model.saving);
+        try std.testing.expectEqual(@as(usize, 0), changed.cmd.len);
+        preset_model = changed.model;
+    }
+
+    const defaults = [_]struct {
+        message: core.Msg,
+        minutes: i64,
+    }{
+        .{ .message = .set_default_duration_15, .minutes = 15 },
+        .{ .message = .set_default_duration_25, .minutes = 25 },
+        .{ .message = .set_default_duration_50, .minutes = 50 },
+        .{ .message = .set_default_duration_90, .minutes = 90 },
+    };
+    for (defaults) |default| {
+        const default_model = core.rt.frameCreate(core.Model, model.*);
+        const current = core.rt.frameCreate(core.DbSettings, model.settings.*);
+        current.focusMinutes = if (default.minutes == 25) 50 else 25;
+        default_model.settings = current;
+        const changed = core.update(default_model, default.message);
+        try std.testing.expectEqual(core.PendingKind.settings, changed.model.pendingKind);
+        try std.testing.expectEqual(default.minutes, changed.model.pendingSettings.focusMinutes);
+        try std.testing.expect(changed.model.saving);
+        try std.testing.expect(changed.cmd.len > 0);
+    }
+
     model.activeSession = core.rt.frameCreate(core.DbSession, .{
         .id = 12,
         .taskId = 0,
@@ -2085,10 +2133,142 @@ test "settings keep the persisted default visible during an active session" {
     try std.testing.expectEqual(@as(i64, 25), core.focusLengthMinutes(model));
     try std.testing.expectEqual(@as(i64, 50), core.settingsFocusMinutes(model));
 
-    const changed = core.update(model, .set_duration_90);
-    try std.testing.expectEqual(core.PendingKind.settings, changed.model.pendingKind);
-    try std.testing.expectEqual(@as(i64, 90), changed.model.pendingSettings.focusMinutes);
-    try std.testing.expect(changed.cmd.len > 0);
+    const transient = core.update(model, .set_duration_90);
+    try std.testing.expectEqual(@as(i64, 25), core.focusLengthMinutes(transient.model));
+    try std.testing.expectEqual(@as(i64, 90), transient.model.focusMinutesOverride);
+    try std.testing.expectEqual(@as(i64, 50), core.settingsFocusMinutes(transient.model));
+    try std.testing.expectEqual(core.PendingKind.none, transient.model.pendingKind);
+    try std.testing.expectEqual(@as(usize, 0), transient.cmd.len);
+
+    const persisted = core.update(transient.model, .set_default_duration_90);
+    try std.testing.expectEqual(core.PendingKind.settings, persisted.model.pendingKind);
+    try std.testing.expectEqual(@as(i64, 90), persisted.model.pendingSettings.focusMinutes);
+    try std.testing.expectEqual(@as(i64, 90), persisted.model.focusMinutesOverride);
+    try std.testing.expect(persisted.cmd.len > 0);
+}
+
+test "unassigned focus is explicit and freezes the selected block duration" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+
+    const duration = core.update(model, .set_duration_50);
+    const started = core.update(duration.model, .start_unassigned_focus);
+    try std.testing.expect(started.model.saving);
+    try std.testing.expectEqual(core.PendingKind.timer_start, started.model.pendingKind);
+    try std.testing.expectEqual(@as(i64, 0), started.model.pendingTaskId);
+    try std.testing.expectEqual(core.SessionMode.focus, started.model.pendingMode);
+    try std.testing.expectEqual(@as(i64, 50), started.model.pendingDurationMinutes);
+    try std.testing.expectEqual(@as(i64, 50), started.model.focusMinutesOverride);
+    try std.testing.expectEqual(core.Section.today, started.model.section);
+    try std.testing.expect(started.cmd.len > 0);
+}
+
+test "space fallback maps to the guarded focus transport" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const message = core.keyMsg(.{
+        .key = "space",
+        .shift = false,
+        .control = false,
+        .alt = false,
+        .super = false,
+    }) orelse {
+        try std.testing.expect(false);
+        return;
+    };
+    try std.testing.expectEqual(.toggle_focus_command, std.meta.activeTag(message));
+    try std.testing.expect(core.keyMsg(.{
+        .key = "space",
+        .shift = false,
+        .control = false,
+        .alt = false,
+        .super = true,
+    }) == null);
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+    model.pendingKind = .none;
+
+    const without_task = core.update(model, message);
+    try std.testing.expect(!without_task.model.saving);
+    try std.testing.expectEqual(core.PendingKind.none, without_task.model.pendingKind);
+    try std.testing.expectEqual(@as(usize, 0), without_task.cmd.len);
+
+    const task = core.rt.frameCreate(core.DbTask, .{
+        .id = 7,
+        .state = .open,
+        .sortOrder = 0,
+        .estimateMinutes = 25,
+        .createdMs = 10,
+        .updatedMs = 10,
+        .completedMs = 0,
+        .title = "Prepare the product demo",
+    });
+    const tasks = core.rt.frameAlloc(*const core.DbTask, 1);
+    tasks[0] = task;
+    model.tasks = tasks;
+    model.selectedTaskId = 7;
+    model.completionDialogOpen = true;
+    model.completionTaskId = 7;
+
+    const during_completion = core.update(model, message);
+    try std.testing.expect(!during_completion.model.saving);
+    try std.testing.expectEqual(core.PendingKind.none, during_completion.model.pendingKind);
+    try std.testing.expectEqual(@as(usize, 0), during_completion.cmd.len);
+
+    model.completionDialogOpen = false;
+    model.completionTaskId = 0;
+    model.saving = true;
+    const during_write = core.update(model, message);
+    try std.testing.expect(during_write.model.saving);
+    try std.testing.expectEqual(core.PendingKind.none, during_write.model.pendingKind);
+    try std.testing.expectEqual(@as(usize, 0), during_write.cmd.len);
+
+    model.saving = false;
+    const started = core.update(model, message);
+    try std.testing.expect(started.model.saving);
+    try std.testing.expectEqual(core.PendingKind.timer_start, started.model.pendingKind);
+    try std.testing.expectEqual(@as(i64, 7), started.model.pendingTaskId);
+    try std.testing.expect(started.cmd.len > 0);
+}
+
+test "taskless completion never offers a task mutation" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+    model.completionDialogOpen = true;
+    model.completionTaskId = 0;
+
+    try std.testing.expect(!core.completionHasTask(model));
+    try std.testing.expectEqualStrings("Unassigned focus block", core.focusTaskTitle(model));
+
+    const task = core.rt.frameCreate(core.DbTask, .{
+        .id = 11,
+        .state = .open,
+        .sortOrder = 0,
+        .estimateMinutes = 25,
+        .createdMs = 10,
+        .updatedMs = 10,
+        .completedMs = 0,
+        .title = "Shape the next milestone",
+    });
+    const tasks = core.rt.frameAlloc(*const core.DbTask, 1);
+    tasks[0] = task;
+    model.tasks = tasks;
+    model.completionTaskId = 11;
+    try std.testing.expect(core.completionHasTask(model));
+
+    task.state = .archived;
+    try std.testing.expect(!core.completionHasTask(model));
 }
 
 test "failed sound toggle rekeys the native switch back to persisted truth" {
@@ -2268,6 +2448,115 @@ test "break cadence chooses a long break after each fourth focus" {
     try std.testing.expectEqual(core.PendingKind.timer_start, long_break.model.pendingKind);
     try std.testing.expectEqual(core.SessionMode.long, long_break.model.pendingMode);
     try std.testing.expectEqual(@as(i64, 15), long_break.model.pendingDurationMinutes);
+}
+
+test "break dismissal discard and natural completion preserve the next focus duration" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
+    const data_dir = try std.fmt.bufPrint(
+        &path_buffer,
+        ".zig-cache/tmp/{s}/break-duration-override-data",
+        .{tmp.sub_path[0..]},
+    );
+    var database = try sqlite.SqliteExtension.init(std.testing.allocator, std.testing.io, data_dir);
+    defer database.deinit();
+    try database.startModule(.{ .platform_name = "macos" });
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+    model.pendingKind = .none;
+    model.nowMs = 1_000;
+
+    const chosen = core.update(model, .set_duration_90);
+    try std.testing.expectEqual(@as(i64, 90), chosen.model.focusMinutesOverride);
+
+    // Cancelling the end-confirmation only returns to the live break. It must
+    // not consume the one-shot duration selected for the next focus block.
+    const first_start = core.update(chosen.model, .start_break);
+    const first_start_request = core.update(first_start.model, .{ .intent_now = 1_000 });
+    const first_started_snapshot = try database.handleRequest(
+        sqlite.timer_start_command,
+        first_start_request.model.retryPayload,
+    );
+    defer database.freeResponse(first_started_snapshot);
+    const first_running = core.update(first_start_request.model, .{ .db_ok = first_started_snapshot });
+    try std.testing.expectEqual(core.SessionMode.short, first_running.model.activeSession.?.mode);
+    try std.testing.expectEqual(@as(i64, 90), first_running.model.focusMinutesOverride);
+
+    const first_prompt = core.update(first_running.model, .request_end_focus);
+    try std.testing.expect(first_prompt.model.endDialogOpen);
+    const prompt_cancelled = core.update(first_prompt.model, .cancel_end_focus);
+    try std.testing.expect(!prompt_cancelled.model.endDialogOpen);
+    try std.testing.expect(prompt_cancelled.model.activeSession != null);
+    try std.testing.expectEqual(@as(i64, 90), prompt_cancelled.model.focusMinutesOverride);
+
+    // Confirming that same prompt really discards the break through SQLite.
+    // The authoritative db_ok snapshot must still retain the focus override.
+    const discard_prompt = core.update(prompt_cancelled.model, .request_end_focus);
+    const discard_intent = core.update(discard_prompt.model, .confirm_end_focus);
+    try std.testing.expectEqual(core.PendingKind.timer_cancel, discard_intent.model.pendingKind);
+    const discard_request = core.update(discard_intent.model, .{ .intent_now = 2_000 });
+    const discarded_snapshot = try database.handleRequest(
+        sqlite.timer_cancel_command,
+        discard_request.model.retryPayload,
+    );
+    defer database.freeResponse(discarded_snapshot);
+    const discarded = core.update(discard_request.model, .{ .db_ok = discarded_snapshot });
+    try std.testing.expect(discarded.model.activeSession == null);
+    try std.testing.expectEqual(@as(i64, 90), discarded.model.focusMinutesOverride);
+
+    // A second break reaches its actual deadline and completes naturally.
+    // Completion is committed before asserting the override, so this covers
+    // the same authoritative path exercised in the running app.
+    const second_start = core.update(discarded.model, .start_break);
+    const second_start_request = core.update(second_start.model, .{ .intent_now = 3_000 });
+    const second_started_snapshot = try database.handleRequest(
+        sqlite.timer_start_command,
+        second_start_request.model.retryPayload,
+    );
+    defer database.freeResponse(second_started_snapshot);
+    const second_running = core.update(second_start_request.model, .{ .db_ok = second_started_snapshot });
+    try std.testing.expectEqual(core.SessionMode.short, second_running.model.activeSession.?.mode);
+    const break_deadline = second_running.model.activeSession.?.endsMs;
+    const natural_completion = core.update(second_running.model, .{ .focus_due = break_deadline });
+    try std.testing.expectEqual(core.PendingKind.timer_complete_natural, natural_completion.model.pendingKind);
+    const completed_snapshot = try database.handleRequest(
+        sqlite.timer_complete_command,
+        natural_completion.model.retryPayload,
+    );
+    defer database.freeResponse(completed_snapshot);
+    const completed = core.update(natural_completion.model, .{ .db_ok = completed_snapshot });
+    try std.testing.expect(completed.model.activeSession == null);
+    try std.testing.expect(completed.model.breakAcknowledgementOpen);
+    try std.testing.expectEqual(@as(i64, 90), completed.model.focusMinutesOverride);
+
+    // The polarity is intentional: once the selected duration is used by a
+    // focus block, terminating that focus consumes the one-shot override.
+    const acknowledged = core.update(completed.model, .dismiss_break_acknowledgement);
+    const focus_start = core.update(acknowledged.model, .start_unassigned_focus);
+    try std.testing.expectEqual(@as(i64, 90), focus_start.model.pendingDurationMinutes);
+    const focus_start_request = core.update(focus_start.model, .{ .intent_now = break_deadline + 1_000 });
+    const focus_started_snapshot = try database.handleRequest(
+        sqlite.timer_start_command,
+        focus_start_request.model.retryPayload,
+    );
+    defer database.freeResponse(focus_started_snapshot);
+    const focus_running = core.update(focus_start_request.model, .{ .db_ok = focus_started_snapshot });
+    const focus_prompt = core.update(focus_running.model, .request_end_focus);
+    const focus_cancel_intent = core.update(focus_prompt.model, .confirm_end_focus);
+    const focus_cancel_request = core.update(focus_cancel_intent.model, .{ .intent_now = break_deadline + 2_000 });
+    const focus_cancelled_snapshot = try database.handleRequest(
+        sqlite.timer_cancel_command,
+        focus_cancel_request.model.retryPayload,
+    );
+    defer database.freeResponse(focus_cancelled_snapshot);
+    const focus_cancelled = core.update(focus_cancel_request.model, .{ .db_ok = focus_cancelled_snapshot });
+    try std.testing.expectEqual(@as(i64, 0), focus_cancelled.model.focusMinutesOverride);
 }
 
 test "ledger badge counts the same completed focus and break blocks as history" {

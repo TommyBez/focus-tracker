@@ -1,16 +1,19 @@
 <!--
-  Quick Focus · Cobalt Instrument
+  Quick Focus · Cobalt Chronograph
 
-  A compact control surface with one deliberate path:
-  choose the work, set the block, start the timer.
-  It shares the exact model, commands, and SQLite authority with the ledger.
+  Set the interval, optionally attach a task, and start. All writes still flow
+  through the shared model.
 -->
 <stack role="group" label="Quick Focus">
-  <column background="background" grow="1" padding="12" gap="12" label="Quick Focus controller">
-    <row padding="4" gap="12" cross="center">
-      <column gap="4" grow="1">
-        <text><span weight="bold">Quick Focus</span></text>
-        <text size="sm" foreground="text_muted">{todayGoalText}</text>
+  <column background="background" grow="1" label="Quick Focus">
+    <row padding="16" gap="12" cross="center">
+      <column gap="2" grow="1">
+        <text size="sm" foreground="text_muted">FOCUS TRACKER</text>
+        <text size="lg"><span weight="medium">Quick Focus</span></text>
+      </column>
+      <column gap="2" cross="end">
+        <text size="sm" foreground="text_muted">TODAY</text>
+        <text size="sm"><span mono="true" weight="medium">{todayGoalText}</span></text>
       </column>
       <stack>
         <button
@@ -27,21 +30,22 @@
     <separator />
 
     <if test="{loadState == 'loading'}">
-      <column grow="1" padding="4" gap="12" main="center" label="Loading Quick Focus">
+      <column grow="1" padding="20" gap="16" main="center" label="Loading Quick Focus">
         <row gap="8" cross="center">
           <spinner />
           <text foreground="text_muted">Opening your local ledger</text>
         </row>
-        <skeleton width="280" height="20" />
-        <skeleton width="364" height="42" />
-        <skeleton width="364" height="88" />
+        <skeleton width="220" height="56" />
+        <skeleton width="360" height="36" />
+        <skeleton width="360" height="96" />
       </column>
     </if>
 
     <else>
       <if test="{loadState == 'fatal'}">
-        <column grow="1" padding="4" gap="12" main="center" label="Quick Focus could not load">
-          <text size="heading"><span weight="bold">Couldn’t open the ledger.</span></text>
+        <column grow="1" padding="24" gap="16" main="center" label="Quick Focus could not load">
+          <text size="sm" foreground="destructive">LEDGER UNAVAILABLE</text>
+          <text size="heading"><span weight="medium">Couldn’t open your focus data.</span></text>
           <text wrap="true" foreground="text_muted">{fatalErrorText}</text>
           <row gap="8">
             <button variant="primary" icon="refresh-cw" on-press="retry_boot">Try again</button>
@@ -52,14 +56,14 @@
 
       <else>
         <if test="{sessionState == 'idle'}">
-          <column grow="1" gap="12" label="Prepare a focus block">
+          <column grow="1" label="Prepare the next focus block">
             <scroll grow="1" overscroll="rubber_band">
-              <column padding="4" gap="8">
+              <column padding="20" gap="20">
                 <if test="{breakAcknowledgementOpen}">
                   <row background="surface_subtle" radius="lg" padding="12" gap="12" cross="center" label="Break recorded">
-                    <column gap="4" grow="1">
+                    <column gap="2" grow="1">
                       <text><span weight="medium">Break recorded</span></text>
-                      <text size="sm" wrap="true" foreground="text_muted">{breakCompletionSummary} Task stays open.</text>
+                      <text size="sm" wrap="true" foreground="text_muted">{breakCompletionSummary} Your queue is unchanged.</text>
                     </column>
                     <button
                       size="icon"
@@ -71,166 +75,256 @@
                   </row>
                 </if>
 
-                <row gap="8" cross="center" label="Choose or add a task">
-                  <column gap="4" grow="1">
-                    <text><span weight="medium">Choose or add a task</span></text>
+                <row gap="16" cross="end" label="Choose focus interval">
+                  <column grow="1" gap="2">
+                    <text size="sm" foreground="text_muted">NEXT INTERVAL</text>
+                    <text size="display" label="{selectedFocusIntervalLabel}"><span mono="true" weight="medium">{pad(focusLengthMinutes, 2)}:00</span></text>
+                  </column>
+                  <toggle-group label="Focus length in minutes" gap="2">
+                    <toggle-button size="sm" selected="{focusLengthMinutes == 15}" disabled="{quickControlsDisabled}" on-toggle="set_duration_15">15</toggle-button>
+                    <toggle-button size="sm" selected="{focusLengthMinutes == 25}" disabled="{quickControlsDisabled}" on-toggle="set_duration_25">25</toggle-button>
+                    <toggle-button size="sm" selected="{focusLengthMinutes == 50}" disabled="{quickControlsDisabled}" on-toggle="set_duration_50">50</toggle-button>
+                    <toggle-button size="sm" selected="{focusLengthMinutes == 90}" disabled="{quickControlsDisabled}" on-toggle="set_duration_90">90</toggle-button>
+                  </toggle-group>
+                </row>
+
+                <separator />
+
+                <column gap="10" label="Attach an open task">
+                  <row gap="8" cross="center">
+                    <column gap="2" grow="1">
+                      <text size="sm" foreground="text_muted">ATTACH A TASK</text>
+                      <text><span weight="medium">Task</span></text>
+                    </column>
                     <text size="sm" foreground="text_muted">{quickTaskCountText}</text>
-                  </column>
-                </row>
+                  </row>
 
-                <row gap="8" cross="center">
-                  <text-field
-                    key="{composerKey}"
-                    grow="1"
-                    text="{taskDraft}"
-                    placeholder="Add a concrete next action"
-                    label="New task for Quick Focus"
-                    autofocus="{quickComposerAutofocus}"
-                    on-input="task_draft_edit"
-                    on-submit="add_task"
-                  />
-                  <stack>
-                    <button
-                      size="icon"
-                      variant="secondary"
-                      icon="plus"
-                      label="Add and select task"
-                      disabled="{not canAddTask or quickControlsDisabled}"
-                      on-press="add_task"
-                    ></button>
-                    <tooltip anchor="above">Add and select task</tooltip>
-                  </stack>
-                </row>
+                  <row gap="8" cross="center">
+                    <text-field
+                      key="{composerKey}"
+                      grow="1"
+                      text="{taskDraft}"
+                      placeholder="Add a concrete next action"
+                      label="New task for Quick Focus"
+                      autofocus="{quickComposerAutofocus}"
+                      on-input="task_draft_edit"
+                      on-submit="add_task"
+                    />
+                    <stack>
+                      <button
+                        size="icon"
+                        variant="secondary"
+                        icon="plus"
+                        label="Add and select task"
+                        disabled="{not canAddTask or quickControlsDisabled}"
+                        on-press="add_task"
+                      ></button>
+                      <tooltip anchor="above">Add and select task</tooltip>
+                    </stack>
+                  </row>
 
-                <if test="{quickHasTasks}">
-                  <list gap="4" label="Choose an open task for Quick Focus">
-                    <for each="quickTasks" key="id" as="q">
-                      <list-item
-                        global-key="{q.id}"
-                        selected="{q.selected}"
-                        disabled="{quickControlsDisabled}"
-                        label="{q.accessibilityLabel}"
-                        on-press="select_quick_task:{q.id}"
-                      >
-                        <spacer width="8" />
-                        <text grow="1" overflow="ellipsis">{q.title}</text>
-                        <spacer width="8" />
-                      </list-item>
-                    </for>
-                  </list>
-                  <if test="{quickHasMoreTasks}">
-                    <button size="sm" variant="ghost" icon="external-link" on-press="open_full_app">Show all open tasks</button>
+                  <if test="{quickHasTasks}">
+                    <list gap="2" label="Choose an open task for Quick Focus">
+                      <for each="quickTasks" key="id" as="q">
+                        <list-item
+                          global-key="{q.id}"
+                          selected="{q.selected}"
+                          disabled="{quickControlsDisabled}"
+                          label="{q.accessibilityLabel}"
+                          on-press="select_quick_task:{q.id}"
+                        >
+                          <spacer width="8" />
+                          <text grow="1" overflow="ellipsis">{q.title}</text>
+                          <if test="{q.selected}">
+                            <badge variant="primary">NEXT</badge>
+                          </if>
+                          <spacer width="8" />
+                        </list-item>
+                      </for>
+                    </list>
+                    <if test="{quickHasMoreTasks}">
+                      <button size="sm" variant="ghost" icon="external-link" on-press="open_full_app">See the full queue</button>
+                    </if>
                   </if>
-                </if>
 
-                <else>
-                  <column background="surface_subtle" radius="lg" padding="12" gap="4" label="No open tasks">
-                    <text><span weight="medium">Add the next concrete action.</span></text>
-                    <text size="sm" wrap="true" foreground="text_muted">It will be selected automatically.</text>
-                  </column>
-                </else>
+                  <else>
+                    <column background="surface_subtle" radius="lg" padding="12" gap="2" label="No open tasks">
+                      <text><span weight="medium">Your queue is clear.</span></text>
+                      <text size="sm" wrap="true" foreground="text_muted">Add a task here, or start an unassigned block below.</text>
+                    </column>
+                  </else>
+                </column>
               </column>
             </scroll>
 
-            <column padding="4" gap="8" label="Choose duration, then start">
-              <row gap="8" cross="center">
-                <text grow="1"><span weight="medium">Duration</span></text>
-                <toggle-group label="Focus length in minutes" gap="2">
-                  <toggle-button size="sm" selected="{focusLengthMinutes == 25}" disabled="{quickControlsDisabled}" on-toggle="set_duration_25">25 min</toggle-button>
-                  <toggle-button size="sm" selected="{focusLengthMinutes == 50}" disabled="{quickControlsDisabled}" on-toggle="set_duration_50">50 min</toggle-button>
-                  <toggle-button size="sm" selected="{focusLengthMinutes == 90}" disabled="{quickControlsDisabled}" on-toggle="set_duration_90">90 min</toggle-button>
-                </toggle-group>
+            <separator />
+
+            <column background="surface" padding="16" gap="10" label="Start focus block">
+              <if test="{selectedTaskExists}">
+                <button
+                  key="{quickStartFocusKey}"
+                  size="lg"
+                  grow="1"
+                  variant="primary"
+                  icon="play"
+                  autofocus="{startAutofocus}"
+                  disabled="{not quickCanStart}"
+                  on-press="start_focus"
+                >Focus on {quickTaskTitle}</button>
+              </if>
+              <else>
+                <button size="lg" grow="1" variant="secondary" disabled="true">Select a task to attach it</button>
+              </else>
+
+              <row gap="10" cross="center" label="Alternative without a task">
+                <column grow="1">
+                  <separator />
+                </column>
+                <text size="sm" foreground="text_muted">OR</text>
+                <column grow="1">
+                  <separator />
+                </column>
               </row>
-              <button key="{quickStartFocusKey}" grow="1" variant="primary" icon="play" autofocus="{startAutofocus}" disabled="{not quickCanStart}" on-press="start_focus">{quickStartLabel}</button>
+              <button
+                grow="1"
+                variant="outline"
+                icon="play"
+                disabled="{not quickCanStart}"
+                on-press="start_unassigned_focus"
+              >Focus without a task</button>
+              <text size="sm" text-alignment="center" foreground="text_muted">Duration applies to this block only.</text>
             </column>
           </column>
         </if>
 
         <else>
-          <scroll grow="1" overscroll="rubber_band">
-            <column padding="4" gap="12">
-              <if test="{sessionState == 'running'}">
-                <column background="surface_subtle" radius="xl" padding="16" gap="12" main="center" label="Active focus transport">
-                  <column gap="4">
-                    <if test="{isBreak}">
-                      <text size="sm" foreground="text_muted"><span weight="medium">Recovery block</span></text>
-                    </if>
-                    <else>
-                      <text size="sm" foreground="text_muted"><span weight="medium">Focus block</span></text>
-                    </else>
-                    <text overflow="ellipsis">{quickTaskTitle}</text>
-                  </column>
-                  <text size="display" text-alignment="center" label="{timerA11y}"><span mono="true" weight="medium" scale="1.35">{pad(remainingMinutes, 2)}:{pad(remainingSeconds, 2)}</span></text>
+          <column grow="1" padding="20" gap="16">
+            <if test="{sessionState == 'running'}">
+              <column grow="1" gap="16" main="center" label="Active timer">
+                <row cross="center">
                   <if test="{isBreak}">
-                    <progress value="{focusProgress}" label="Break progress" />
+                    <badge variant="secondary">BREAK</badge>
                   </if>
                   <else>
-                    <progress value="{focusProgress}" label="Focus block progress" />
+                    <badge variant="primary">FOCUSING</badge>
                   </else>
-                  <row gap="8" label="Timer transport controls">
-                    <button key="running-primary" grow="1" variant="secondary" icon="pause" autofocus="{transportAutofocus and not endDialogOpen}" disabled="{quickControlsDisabled}" on-press="pause_focus">Pause</button>
-                    <button grow="1" variant="ghost" disabled="{saving or hasWriteError}" on-press="request_quick_end_focus">Finish…</button>
-                  </row>
-                </column>
-              </if>
+                  <spacer grow="1" />
+                  <text size="sm" foreground="text_muted">{focusLengthMinutes} MIN BLOCK</text>
+                </row>
+                <text size="lg" overflow="ellipsis">{quickTaskTitle}</text>
+                <spacer grow="1" />
+                <text size="display" text-alignment="center" label="{timerA11y}"><span mono="true" weight="medium" scale="1.38">{pad(remainingMinutes, 2)}:{pad(remainingSeconds, 2)}</span></text>
+                <if test="{isBreak}">
+                  <progress height="6" value="{focusProgress}" label="Break progress" />
+                </if>
+                <else>
+                  <progress height="6" value="{focusProgress}" label="Focus block progress" />
+                </else>
+                <spacer grow="1" />
+                <button key="running-primary" size="lg" grow="1" variant="primary" icon="pause" autofocus="{transportAutofocus and not endDialogOpen}" disabled="{quickControlsDisabled}" on-press="pause_focus">Pause</button>
+                <if test="{isBreak}">
+                  <button grow="1" variant="ghost" disabled="{saving or hasWriteError}" on-press="request_quick_end_focus">Finish break…</button>
+                </if>
+                <else>
+                  <button grow="1" variant="ghost" disabled="{saving or hasWriteError}" on-press="request_quick_end_focus">Finish focus block…</button>
+                </else>
+                <text size="sm" text-alignment="center" foreground="text_muted">Press Space to pause.</text>
+              </column>
+            </if>
 
-              <if test="{sessionState == 'paused'}">
-                <column background="surface_subtle" radius="xl" padding="16" gap="12" main="center" label="Paused focus transport">
-                  <column gap="4">
-                    <text size="sm" foreground="text_muted"><span weight="medium">Paused</span></text>
+            <if test="{sessionState == 'paused'}">
+              <column grow="1" gap="16" main="center" label="Paused timer">
+                <row cross="center">
+                  <badge variant="secondary">PAUSED</badge>
+                  <spacer grow="1" />
+                  <text size="sm" foreground="text_muted">TIMER PAUSED</text>
+                </row>
+                <text size="lg" overflow="ellipsis">{quickTaskTitle}</text>
+                <spacer grow="1" />
+                <text size="display" text-alignment="center" label="{timerA11y}"><span mono="true" weight="medium" scale="1.38">{pad(remainingMinutes, 2)}:{pad(remainingSeconds, 2)}</span></text>
+                <if test="{isBreak}">
+                  <progress height="6" value="{focusProgress}" label="Paused break progress" />
+                </if>
+                <else>
+                  <progress height="6" value="{focusProgress}" label="Paused focus block progress" />
+                </else>
+                <spacer grow="1" />
+                <button key="paused-primary" size="lg" grow="1" variant="primary" icon="play" autofocus="{transportAutofocus and not endDialogOpen}" disabled="{quickControlsDisabled}" on-press="resume_focus">Resume</button>
+                <if test="{isBreak}">
+                  <button grow="1" variant="ghost" disabled="{saving or hasWriteError}" on-press="request_quick_end_focus">Finish break…</button>
+                </if>
+                <else>
+                  <button grow="1" variant="ghost" disabled="{saving or hasWriteError}" on-press="request_quick_end_focus">Finish focus block…</button>
+                </else>
+                <text size="sm" text-alignment="center" foreground="text_muted">Press Space to resume.</text>
+              </column>
+            </if>
+
+            <if test="{sessionState == 'complete' and quickCompletionDialogOpen}">
+              <column grow="1" gap="16" main="center" label="Recorded focus block">
+                <row>
+                  <badge variant="primary">RECORDED</badge>
+                </row>
+                <column gap="6">
+                  <text size="heading"><span weight="medium">Focus block saved.</span></text>
+                  <text wrap="true" foreground="text_muted">{quickCompletionSummary}</text>
+                </column>
+
+                <if test="{completionHasTask}">
+                  <column background="surface_subtle" radius="lg" padding="14" gap="4">
+                    <text size="sm" foreground="text_muted">ATTACHED TASK</text>
                     <text overflow="ellipsis">{quickTaskTitle}</text>
+                    <text size="sm" wrap="true" foreground="text_muted">It remains open until you decide otherwise.</text>
                   </column>
-                  <text size="display" text-alignment="center" label="{timerA11y}"><span mono="true" weight="medium" scale="1.35">{pad(remainingMinutes, 2)}:{pad(remainingSeconds, 2)}</span></text>
-                  <if test="{isBreak}">
-                    <progress value="{focusProgress}" label="Paused break progress" />
-                  </if>
-                  <else>
-                    <progress value="{focusProgress}" label="Paused focus block progress" />
-                  </else>
-                  <row gap="8" label="Paused timer transport controls">
-                    <button key="paused-primary" grow="1" variant="primary" icon="play" autofocus="{transportAutofocus and not endDialogOpen}" disabled="{quickControlsDisabled}" on-press="resume_focus">Resume</button>
-                    <button grow="1" variant="ghost" disabled="{saving or hasWriteError}" on-press="request_quick_end_focus">Finish…</button>
-                  </row>
-                </column>
-              </if>
-
-              <if test="{sessionState == 'complete' and quickCompletionDialogOpen}">
-                <column background="surface_subtle" radius="xl" padding="16" gap="12" main="center" label="Recorded focus block and optional task choices">
-                  <column gap="4">
-                    <text><span weight="bold">Focus recorded</span></text>
-                    <text size="sm" foreground="text_muted">{quickCompletionSummary}</text>
-                  </column>
-                  <text overflow="ellipsis" text-alignment="center">{quickTaskTitle}</text>
-                  <text wrap="true" text-alignment="center" size="sm" foreground="text_muted">The task is still open. You can reverse a completed task later.</text>
-                  <column gap="8">
+                  <column gap="8" label="Task and break choices">
                     <button variant="primary" icon="check" disabled="{saving or hasWriteError}" on-press="complete_task_after_focus">Mark task complete</button>
                     <button key="complete-safe" variant="secondary" autofocus="true" disabled="{saving or hasWriteError}" on-press="keep_task_open_after_focus">Keep task open</button>
                     <button variant="ghost" icon="clock" disabled="{saving or hasWriteError}" on-press="start_break">Keep task open + start {nextBreakMinutes} min break</button>
                   </column>
-                </column>
-              </if>
+                </if>
 
-              <if test="{sessionState == 'complete' and not quickCompletionDialogOpen}">
-                <column background="surface_subtle" radius="xl" padding="16" gap="12" main="center" cross="center" label="Completed focus block">
-                  <text size="heading"><span weight="bold">Focus recorded.</span></text>
-                  <text wrap="true" text-alignment="center" foreground="text_muted">The task is still open in Focus Tracker.</text>
-                  <button variant="primary" on-press="open_full_app">Update task</button>
-                </column>
-              </if>
-            </column>
-          </scroll>
+                <else>
+                  <column background="surface_subtle" radius="lg" padding="14" gap="4">
+                    <text size="sm" foreground="text_muted">UNASSIGNED BLOCK</text>
+                    <text><span weight="medium">No task was attached.</span></text>
+                    <text size="sm" wrap="true" foreground="text_muted">The focused time is safely recorded in Ledger.</text>
+                  </column>
+                  <column gap="8" label="Unassigned focus choices">
+                    <button key="complete-safe" variant="primary" autofocus="true" disabled="{saving or hasWriteError}" on-press="keep_task_open_after_focus">Done</button>
+                    <button variant="ghost" icon="clock" disabled="{saving or hasWriteError}" on-press="start_break">Start a {nextBreakMinutes} min break</button>
+                  </column>
+                </else>
+              </column>
+            </if>
+
+            <if test="{sessionState == 'complete' and not quickCompletionDialogOpen}">
+              <column grow="1" gap="16" main="center" cross="center" label="Completed focus block">
+                <row>
+                  <badge variant="primary">RECORDED</badge>
+                </row>
+                <text size="heading" text-alignment="center"><span weight="medium">Focus saved to Ledger.</span></text>
+                <if test="{completionHasTask}">
+                  <text wrap="true" text-alignment="center" foreground="text_muted">Open Focus Tracker when you’re ready to update the attached task.</text>
+                </if>
+                <else>
+                  <text wrap="true" text-alignment="center" foreground="text_muted">No task was attached to this block.</text>
+                </else>
+                <button variant="primary" on-press="open_full_app">Open Ledger</button>
+              </column>
+            </if>
+          </column>
         </else>
 
         <if test="{saving or hasWriteError}">
           <separator />
           <if test="{saving}">
-            <row height="40" padding="4" gap="8" cross="center" label="Saving changes">
+            <row height="40" padding="12" gap="8" cross="center" label="Saving changes">
               <spinner />
-              <text size="sm" foreground="text_muted">Saving</text>
+              <text size="sm" foreground="text_muted">Saving to your local ledger</text>
             </row>
           </if>
           <else>
-            <row height="40" padding="4" gap="8" cross="center" label="Changes were not saved">
+            <row height="40" padding="12" gap="8" cross="center" label="Changes were not saved">
               <text size="sm" foreground="destructive"><span weight="medium">Unable to save</span></text>
               <text grow="1" size="sm" foreground="text_muted" overflow="ellipsis">{writeErrorText}</text>
               <button size="sm" variant="ghost" on-press="discard_failed_change">Discard</button>
