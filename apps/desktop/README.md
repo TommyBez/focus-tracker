@@ -60,6 +60,7 @@ deliberately outside the first release.
 | Settings view | `src/settings.native` | Fixed model-declared Settings window with live, locally persisted controls |
 | Quick Focus view | `src/quick.native` | Compact always-on-top controller driven by the same model and SQLite snapshots |
 | Host runner | `src/native/main.zig` | Standard Native SDK runner plus the explicit host-call binding |
+| Global shortcut | `src/native/global_hotkey.zig` | Transactional macOS Carbon registration for Quick Focus while the app is in the background |
 | SQLite extension | `src/native/sqlite_extension.zig` | Migrations, prepared statements, transactional domain operations, authoritative snapshots |
 
 The TypeScript layer never sends SQL. Every mutation is a typed domain request
@@ -92,7 +93,7 @@ database is surfaced as a recovery error and is never silently replaced.
 | `⌘2` | Focus ledger |
 | `⌘,` | Settings |
 | `⌘⇧Space` | Start, pause, or resume the current focus block |
-| `⌘⇧F` | Open or refocus Quick Focus |
+| `⌘⇧F` | Open or refocus Quick Focus system-wide (configurable default) |
 | `Space` | Pause or resume a running block, when no control has focus |
 
 `Space` is a last-resort fallback: a focused control answers its own keys and
@@ -106,6 +107,13 @@ chamber to the persisted default.
 
 The window close button hides the app while an active timer continues. Quitting
 the application is a distinct, explicit action.
+
+Settings can enable or disable the global Quick Focus shortcut and choose its
+modifier preset and key. Changes are registered with macOS before SQLite
+commits them: if a candidate is unavailable, the persisted and active shortcut
+stay unchanged. The default is Command + Shift + F. The registration exists
+only while Focus Tracker is running and requires no Accessibility or Input
+Monitoring permission.
 
 Quick Focus and Settings are mutually exclusive auxiliary windows. This keeps
 the Native SDK key fallback deterministic: `Escape` dismisses the active

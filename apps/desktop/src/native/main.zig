@@ -9,6 +9,7 @@ const runner = @import("runner");
 const native_sdk = @import("native_sdk");
 const manifest = @import("app_manifest_zon");
 const sqlite = @import("sqlite_extension.zig");
+const global_hotkey = @import("global_hotkey.zig");
 const cobalt_theme = @import("theme.zig");
 pub const core = @import("core");
 
@@ -155,6 +156,8 @@ pub fn main(init: std.process.Init) !void {
         .host = &host,
         .registry = registry,
     };
+    host.shortcut_preflight_context = &extended;
+    host.shortcut_preflight_fn = ExtensionApp.preflightShortcutRequest;
 
     try runner.runWithOptions(extended.app(), runOptions(), init);
 }
@@ -294,11 +297,11 @@ fn modelWindows(model: *const Model, scratch: *App.WindowsScratch) []const App.W
             .label = settings_window_label,
             .canvas_label = settings_canvas_label,
             .title = "Settings",
-            // Each preference now pairs presets with a stepper, so the fixed
-            // window has to hold two controls per row without truncating the
-            // captions that state each value's range.
+            // Timer, daily, and global-shortcut preferences all apply live in
+            // one fixed native surface; keep enough vertical room for the two
+            // shortcut modifier rows and their registration status.
             .width = 800,
-            .height = 330,
+            .height = 560,
             .resizable = false,
             .activate_on_show = true,
             .on_close = .close_settings,
@@ -350,6 +353,7 @@ fn runOptions() runner.RunOptions {
 
 const HostContext = struct {
     const PendingOwner = enum { none, database, page };
+    const ShortcutPreflightFn = *const fn (*anyopaque, []const u8, []const u8) anyerror!void;
 
     const PendingResult = struct {
         key: u64,
@@ -360,6 +364,8 @@ const HostContext = struct {
 
     database: *sqlite.SqliteExtension,
     services: ?native_sdk.platform.PlatformServices = null,
+    shortcut_preflight_context: ?*anyopaque = null,
+    shortcut_preflight_fn: ?ShortcutPreflightFn = null,
     pending_key: u64 = 0,
     pending_active: bool = false,
     pending_ok: bool = false,
@@ -370,6 +376,8 @@ const HostContext = struct {
     fn deinit(self: *HostContext) void {
         self.clearPending();
         self.services = null;
+        self.shortcut_preflight_context = null;
+        self.shortcut_preflight_fn = null;
     }
 
     fn binding(self: *HostContext) native_sdk.HostCallBinding {
@@ -393,19 +401,21 @@ const HostContext = struct {
     fn request(context: *anyopaque, name: []const u8, key: u64, payload: []const u8) void {
         const self: *HostContext = @ptrCast(@alignCast(context));
         self.clearPending();
+        if (self.shortcut_preflight_fn) |preflight| {
+            const preflight_context = self.shortcut_preflight_context orelse {
+                self.setPendingError(key, "shortcut_unavailable");
+                return;
+            };
+            preflight(preflight_context, name, payload) catch {
+                // Carbon rejected the candidate before SQLite saw the write.
+                // Deliver the rejection through the existing request result
+                // so the core unwinds the pending settings intent normally.
+                self.setPendingError(key, "shortcut_unavailable");
+                return;
+            };
+        }
         const response = self.database.handleRequest(name, payload) catch |err| {
-            const error_bytes = self.database.errorBytes(err);
-            self.pending_key = key;
-            self.pending_active = true;
-            self.pending_ok = false;
-            if (std.heap.page_allocator.dupe(u8, error_bytes)) |owned| {
-                self.pending_bytes = owned;
-                self.pending_owner = .page;
-            } else |_| {
-                self.pending_bytes = @constCast("out_of_memory");
-                self.pending_owner = .none;
-            }
-            self.requestWake();
+            self.setPendingError(key, self.database.errorBytes(err));
             return;
         };
         self.pending_key = key;
@@ -414,6 +424,21 @@ const HostContext = struct {
         self.pending_bytes = response;
         self.pending_owner = .database;
         self.pending_frame_requested = false;
+        self.requestWake();
+    }
+
+    fn setPendingError(self: *HostContext, key: u64, error_bytes: []const u8) void {
+        self.pending_key = key;
+        self.pending_active = true;
+        self.pending_ok = false;
+        self.pending_frame_requested = false;
+        if (std.heap.page_allocator.dupe(u8, error_bytes)) |owned| {
+            self.pending_bytes = owned;
+            self.pending_owner = .page;
+        } else |_| {
+            self.pending_bytes = @constCast("out_of_memory");
+            self.pending_owner = .none;
+        }
         self.requestWake();
     }
 
@@ -476,10 +501,18 @@ const HostContext = struct {
 /// It mirrors Runtime's documented extension ordering without replacing
 /// or copying the SDK runner.
 const ExtensionApp = struct {
+    const ShortcutReport = enum { unknown, active, disabled, unavailable };
+
     inner: native_sdk.App,
     state: *App,
     host: *HostContext,
     registry: native_sdk.extensions.ModuleRegistry,
+    runtime: ?*native_sdk.Runtime = null,
+    hotkey: global_hotkey.Manager = .{},
+    hotkey_install_failed: bool = false,
+    stopping: bool = false,
+    shortcut_report: ShortcutReport = .unknown,
+    shortcut_report_config: ?global_hotkey.Config = null,
 
     fn app(self: *ExtensionApp) native_sdk.App {
         return .{
@@ -514,9 +547,17 @@ const ExtensionApp = struct {
 
     fn start(context: *anyopaque, runtime: *native_sdk.Runtime) anyerror!void {
         const self: *ExtensionApp = @ptrCast(@alignCast(context));
+        self.stopping = false;
+        self.runtime = runtime;
         self.host.services = runtime.options.platform.services;
         try self.inner.start(runtime);
         try self.registry.startAll(runtimeContext(runtime));
+        self.hotkey.install(self, dispatchGlobalQuick) catch {
+            // A missing Carbon handler must not make the local ledger or timer
+            // unusable. Settings surfaces the unavailable runtime state once
+            // the authoritative SQLite snapshot has loaded.
+            self.hotkey_install_failed = true;
+        };
     }
 
     fn event(context: *anyopaque, runtime: *native_sdk.Runtime, value: native_sdk.Event) anyerror!void {
@@ -546,6 +587,15 @@ const ExtensionApp = struct {
             .command => |command| try self.registry.dispatchCommand(runtimeContext(runtime), .{ .name = command.name }),
             else => {},
         }
+        // The stop event lets the inner app tear its model down before the
+        // extension stop callback releases Carbon. Do not interpret that
+        // transient teardown state as a new shortcut configuration.
+        const stopping = switch (value) {
+            .lifecycle => |lifecycle| lifecycle == .stop,
+            else => false,
+        };
+        if (stopping) self.stopping = true;
+        if (!self.stopping) try self.syncGlobalHotKey(runtime);
         try self.requestHostResultFrame();
     }
 
@@ -570,6 +620,9 @@ const ExtensionApp = struct {
 
     fn stop(context: *anyopaque, runtime: *native_sdk.Runtime) anyerror!void {
         const self: *ExtensionApp = @ptrCast(@alignCast(context));
+        self.stopping = true;
+        self.hotkey.stop();
+        self.runtime = null;
         var module_error: ?anyerror = null;
         self.registry.stopAll(runtimeContext(runtime)) catch |err| {
             module_error = err;
@@ -580,11 +633,144 @@ const ExtensionApp = struct {
         if (module_error) |err| return err;
     }
 
+    fn dispatchGlobalQuick(raw: ?*anyopaque) void {
+        const self: *ExtensionApp = @ptrCast(@alignCast(raw orelse return));
+        const runtime = self.runtime orelse return;
+        runtime.dispatchCommand(self.app(), .{
+            .name = "app.quick",
+            .source = .shortcut,
+        }) catch |err| runtime.recordDispatchError("global_hotkey", err);
+    }
+
+    /// Gate shortcut-changing settings writes at the last boundary before
+    /// SQLite. During a host call the UiApp mirror still contains the previous
+    /// root, while Adapter.Host already owns the model that emitted the
+    /// request, so the bridge model is the authoritative candidate here.
+    fn preflightShortcutRequest(
+        context: *anyopaque,
+        name: []const u8,
+        payload: []const u8,
+    ) anyerror!void {
+        _ = payload;
+        if (!std.mem.eql(u8, name, sqlite.settings_set_command)) return;
+
+        const self: *ExtensionApp = @ptrCast(@alignCast(context));
+        const model = Adapter.Host.model();
+        const candidate = shortcutWriteCandidate(model, name) orelse return;
+        if (self.hotkey_install_failed) return error.HotKeyHandlerUnavailable;
+        if (self.hotkey.stagedMatches(candidate)) return;
+        try self.hotkey.stage(candidate);
+    }
+
+    fn syncGlobalHotKey(self: *ExtensionApp, runtime: *native_sdk.Runtime) anyerror!void {
+        const model = &self.state.model;
+        if (model.loadState != .ready) return;
+
+        const committed = hotKeyConfig(model.settings);
+        const pending = hotKeyConfig(model.pendingSettings);
+        const shortcut_write = model.saving and model.pendingKind == .settings and
+            !global_hotkey.Config.eql(committed, pending);
+
+        if (model.hasWriteError) self.hotkey.rollbackStage();
+
+        if (shortcut_write) {
+            // HostContext preflighted this candidate synchronously before its
+            // SQLite request. Keep the staged registration inert until the
+            // corresponding db_ok changes the committed model.
+            return;
+        }
+
+        if (self.hotkey.hasStage()) {
+            if (self.hotkey.stagedMatches(committed)) {
+                self.hotkey.promote();
+            } else {
+                self.hotkey.rollbackStage();
+            }
+        }
+
+        if (self.hotkey_install_failed) {
+            try self.reportShortcut(runtime, .unavailable, committed);
+            return;
+        }
+        if (!self.hotkey.activeMatches(committed)) {
+            self.hotkey.replaceCommitted(committed) catch {
+                try self.reportShortcut(runtime, .unavailable, committed);
+                return;
+            };
+        }
+        try self.reportShortcut(runtime, if (committed.enabled) .active else .disabled, committed);
+    }
+
+    fn reportShortcut(
+        self: *ExtensionApp,
+        runtime: *native_sdk.Runtime,
+        report: ShortcutReport,
+        config: global_hotkey.Config,
+    ) anyerror!void {
+        if (self.shortcut_report == report) {
+            if (self.shortcut_report_config) |previous| {
+                if (global_hotkey.Config.eql(previous, config)) return;
+            }
+        }
+        // Set the dedupe state before dispatch: the command re-enters this
+        // adapter synchronously and must observe the report as delivered.
+        self.shortcut_report = report;
+        self.shortcut_report_config = config;
+        const command = switch (report) {
+            .active => "app.shortcut-active",
+            .disabled => "app.shortcut-disabled",
+            .unavailable => "app.shortcut-unavailable",
+            .unknown => return,
+        };
+        try self.dispatchShortcutCommand(runtime, command);
+    }
+
+    fn dispatchShortcutCommand(
+        self: *ExtensionApp,
+        runtime: *native_sdk.Runtime,
+        command: []const u8,
+    ) anyerror!void {
+        try runtime.dispatchCommand(self.app(), .{
+            .name = command,
+            .source = .runtime,
+        });
+    }
+
     fn replay(context: *anyopaque, control: native_sdk.runtime.ReplayControl) anyerror!void {
         const self: *ExtensionApp = @ptrCast(@alignCast(context));
         try self.inner.replayControl(control);
     }
 };
+
+fn hotKeyConfig(settings: *const core.DbSettings) global_hotkey.Config {
+    return .{
+        .enabled = settings.quickShortcutEnabled,
+        .key = switch (settings.quickShortcutKey) {
+            .f => .f,
+            .q => .q,
+            .k => .k,
+            .t => .t,
+            .p => .p,
+            .space => .space,
+        },
+        .modifiers = switch (settings.quickShortcutModifiers) {
+            .command_shift => .command_shift,
+            .command_option => .command_option,
+            .control_shift => .control_shift,
+            .control_option => .control_option,
+            .command_control => .command_control,
+            .command_control_shift => .command_control_shift,
+        },
+    };
+}
+
+fn shortcutWriteCandidate(model: *const Model, name: []const u8) ?global_hotkey.Config {
+    if (!std.mem.eql(u8, name, sqlite.settings_set_command)) return null;
+    if (!model.saving or model.pendingKind != .settings) return null;
+    const committed = hotKeyConfig(model.settings);
+    const candidate = hotKeyConfig(model.pendingSettings);
+    return if (global_hotkey.Config.eql(committed, candidate)) null else candidate;
+}
 
 /// Escape is a surface command, not text input. The stock app-level key
 /// fallback intentionally yields to editors, so this thin app adapter restores
@@ -1311,7 +1497,7 @@ fn testEmptySnapshot(buffer: []u8, focus_minutes: u32) []const u8 {
     var at: usize = 0;
     @memcpy(buffer[0..4], "FCS2");
     at = 4;
-    testWriteU32(buffer, &at, 2); // protocol version
+    testWriteU32(buffer, &at, 3); // protocol version
     testWriteU64(buffer, &at, 1); // revision
     testWriteU32(buffer, &at, focus_minutes);
     testWriteU32(buffer, &at, 5); // short break
@@ -1319,6 +1505,10 @@ fn testEmptySnapshot(buffer: []u8, focus_minutes: u32) []const u8 {
     testWriteU32(buffer, &at, 120); // daily goal
     buffer[at] = 1; // completion sound
     at += 1;
+    buffer[at] = 1; // global shortcut enabled
+    buffer[at + 1] = 0; // Command + Shift
+    buffer[at + 2] = 0; // F
+    at += 3;
     testWriteU64(buffer, &at, 1); // next task id
     testWriteU32(buffer, &at, 0); // task count
     buffer[at] = 0; // no active session
@@ -1341,7 +1531,7 @@ fn testRecoveredSnapshot(buffer: []u8) []const u8 {
     var at: usize = 0;
     @memcpy(buffer[0..4], "FCS2");
     at = 4;
-    testWriteU32(buffer, &at, 2);
+    testWriteU32(buffer, &at, 3);
     testWriteU64(buffer, &at, 2); // revision
     testWriteU32(buffer, &at, 25);
     testWriteU32(buffer, &at, 5);
@@ -1349,6 +1539,10 @@ fn testRecoveredSnapshot(buffer: []u8) []const u8 {
     testWriteU32(buffer, &at, 120);
     buffer[at] = 1;
     at += 1;
+    buffer[at] = 1;
+    buffer[at + 1] = 0;
+    buffer[at + 2] = 0;
+    at += 3;
     testWriteU64(buffer, &at, 4); // next task id
     testWriteU32(buffer, &at, 1); // one task
     testWriteU64(buffer, &at, 3); // task id
@@ -2217,6 +2411,119 @@ test "failed sound toggle rekeys the native switch back to persisted truth" {
     try std.testing.expect(core.soundEnabled(discarded.model));
     try std.testing.expect(core.soundSwitchKey(discarded.model) != failed_key);
     try std.testing.expectEqual(initial_key, core.soundSwitchKey(discarded.model));
+}
+
+test "shortcut preferences preserve the committed combo when native preflight rejects a change" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+    const active = core.update(model, .shortcut_active);
+    try std.testing.expect(core.quickShortcutEnabled(active.model));
+    try std.testing.expectEqual(core.QuickShortcutKey.f, core.quickShortcutKey(active.model));
+    try std.testing.expectEqual(core.QuickShortcutModifiers.command_shift, core.quickShortcutModifiers(active.model));
+    try std.testing.expectEqualStrings("Command + Shift + F", core.quickShortcutLabel(active.model));
+
+    const changing = core.update(active.model, .set_quick_shortcut_key_q);
+    try std.testing.expect(changing.model.saving);
+    try std.testing.expectEqual(core.PendingKind.settings, changing.model.pendingKind);
+    try std.testing.expectEqual(core.QuickShortcutKey.q, changing.model.pendingSettings.quickShortcutKey);
+
+    const requested = core.update(changing.model, .{ .intent_now = 1_000 });
+    try std.testing.expect(requested.model.retryPayload.len > 0);
+    const rejected = core.update(requested.model, .{ .db_err = "shortcut_unavailable" });
+    try std.testing.expect(!rejected.model.saving);
+    try std.testing.expect(!rejected.model.hasWriteError);
+    try std.testing.expectEqual(core.PendingKind.none, rejected.model.pendingKind);
+    try std.testing.expectEqual(core.QuickShortcutKey.f, core.quickShortcutKey(rejected.model));
+    try std.testing.expect(rejected.model.quickShortcutActive);
+    try std.testing.expect(core.quickShortcutHasError(rejected.model));
+
+    const switch_key_before = core.quickShortcutSwitchKey(active.model);
+    const disabling = core.update(active.model, .toggle_quick_shortcut);
+    try std.testing.expect(!disabling.model.pendingSettings.quickShortcutEnabled);
+    try std.testing.expectEqual(core.QuickShortcutKey.f, disabling.model.pendingSettings.quickShortcutKey);
+    try std.testing.expectEqual(core.QuickShortcutModifiers.command_shift, disabling.model.pendingSettings.quickShortcutModifiers);
+    const disabling_requested = core.update(disabling.model, .{ .intent_now = 2_000 });
+    const disabling_rejected = core.update(disabling_requested.model, .{ .db_err = "shortcut_unavailable" });
+    try std.testing.expect(core.quickShortcutEnabled(disabling_rejected.model));
+    try std.testing.expect(core.quickShortcutSwitchKey(disabling_rejected.model) != switch_key_before);
+}
+
+test "shortcut preflight classification ignores ordinary settings and blocks SQLite on rejection" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+
+    const sound_change = core.update(model, .toggle_sound);
+    try std.testing.expect(shortcutWriteCandidate(sound_change.model, sqlite.settings_set_command) == null);
+
+    const shortcut_change = core.update(model, .set_quick_shortcut_key_q);
+    const candidate = shortcutWriteCandidate(shortcut_change.model, sqlite.settings_set_command) orelse
+        return error.TestExpectedShortcutCandidate;
+    try std.testing.expectEqual(global_hotkey.Key.q, candidate.key);
+    const requested = core.update(shortcut_change.model, .{ .intent_now = 1_000 });
+    try std.testing.expect(requested.model.retryPayload.len > 0);
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
+    const data_dir = try std.fmt.bufPrint(
+        &path_buffer,
+        ".zig-cache/tmp/{s}/shortcut-preflight-data",
+        .{tmp.sub_path[0..]},
+    );
+    var database = try sqlite.SqliteExtension.init(std.testing.allocator, std.testing.io, data_dir);
+    defer database.deinit();
+    try database.startModule(.{ .platform_name = "macos" });
+
+    const RejectingPreflight = struct {
+        calls: usize = 0,
+        saw_settings_command: bool = false,
+        payload_len: usize = 0,
+
+        fn run(raw: *anyopaque, name: []const u8, payload: []const u8) anyerror!void {
+            const self: *@This() = @ptrCast(@alignCast(raw));
+            self.calls += 1;
+            self.saw_settings_command = std.mem.eql(u8, name, sqlite.settings_set_command);
+            self.payload_len = payload.len;
+            return error.HotKeyUnavailable;
+        }
+    };
+    var rejector = RejectingPreflight{};
+    var host = HostContext{
+        .database = &database,
+        .shortcut_preflight_context = &rejector,
+        .shortcut_preflight_fn = RejectingPreflight.run,
+    };
+    defer host.deinit();
+
+    HostContext.request(
+        &host,
+        sqlite.settings_set_command,
+        77,
+        requested.model.retryPayload,
+    );
+    try std.testing.expectEqual(@as(usize, 1), rejector.calls);
+    try std.testing.expect(rejector.saw_settings_command);
+    try std.testing.expect(rejector.payload_len > 0);
+    try std.testing.expect(host.pending_active);
+    try std.testing.expect(!host.pending_ok);
+    try std.testing.expectEqualStrings("shortcut_unavailable", host.pending_bytes);
+
+    // The exact same revision must still be writable. If request() had reached
+    // SQLite before the rejecting preflight, this second call would fail with
+    // stale_revision instead of committing successfully.
+    const committed = try database.handleRequest(
+        sqlite.settings_set_command,
+        requested.model.retryPayload,
+    );
+    database.freeResponse(committed);
 }
 
 test "native escape interceptor preserves IME cancellation and carries surface identity" {

@@ -24,7 +24,9 @@
         .{ .id = "app.today", .key = "1", .modifiers = .{"primary"} },
         .{ .id = "app.ledger", .key = "2", .modifiers = .{"primary"} },
         .{ .id = "app.toggle-focus", .key = "space", .modifiers = .{ "primary", "shift" } },
-        .{ .id = "app.quick", .key = "f", .modifiers = .{ "primary", "shift" } },
+        // Quick Focus is registered through Carbon so it also works while a
+        // different application is frontmost. Keeping a local binding here
+        // would dispatch it twice when Focus Tracker itself has focus.
         .{ .id = "app.settings", .key = ",", .modifiers = .{"primary"} },
         // Escape intentionally stays out of the host shortcut monitor. The
         // canvas adapter needs the original key event and IME edit payload to

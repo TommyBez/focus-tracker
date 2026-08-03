@@ -51,9 +51,18 @@ pub fn build(b: *std.Build) void {
         };
         artifacts.exe.root_module.addSystemIncludePath(sdk_headers);
         artifacts.tests.root_module.addSystemIncludePath(sdk_headers);
+        const sdk_frameworks: std.Build.LazyPath = .{
+            .cwd_relative = b.pathJoin(&.{ sysroot, "System/Library/Frameworks" }),
+        };
+        artifacts.exe.root_module.addFrameworkPath(sdk_frameworks);
+        artifacts.tests.root_module.addFrameworkPath(sdk_frameworks);
     }
     artifacts.exe.root_module.linkSystemLibrary("sqlite3", sqlite_link_options);
     artifacts.tests.root_module.linkSystemLibrary("sqlite3", sqlite_link_options);
+    // Carbon's RegisterEventHotKey is the supported macOS seam that keeps
+    // Quick Focus available while another application is frontmost.
+    artifacts.exe.root_module.linkFramework("Carbon", .{});
+    artifacts.tests.root_module.linkFramework("Carbon", .{});
 
     addSqliteTestStep(b, artifacts.tests.root_module, sqlite_link_options);
 }

@@ -29,6 +29,8 @@ import {
   type DbSettings,
   type DbStats,
   type DbTask,
+  type QuickShortcutKey,
+  type QuickShortcutModifiers,
   type SessionMode,
   type TaskState,
 } from "./protocol.ts";
@@ -121,6 +123,9 @@ export interface Model {
   readonly saving: boolean;
   readonly revision: number;
   readonly settings: DbSettings;
+  readonly quickShortcutActive: boolean;
+  readonly quickShortcutError: boolean;
+  readonly quickShortcutErrorText: Bytes;
   readonly tasks: readonly DbTask[];
   readonly activeSession: DbSession | null;
   readonly recentSessions: readonly DbSession[];
@@ -247,6 +252,23 @@ export type Msg =
   | { readonly kind: "daily_goal_up" }
   | { readonly kind: "daily_goal_down" }
   | { readonly kind: "toggle_sound" }
+  | { readonly kind: "toggle_quick_shortcut" }
+  | { readonly kind: "set_quick_shortcut_key_f" }
+  | { readonly kind: "set_quick_shortcut_key_q" }
+  | { readonly kind: "set_quick_shortcut_key_k" }
+  | { readonly kind: "set_quick_shortcut_key_t" }
+  | { readonly kind: "set_quick_shortcut_key_p" }
+  | { readonly kind: "set_quick_shortcut_key_space" }
+  | { readonly kind: "set_quick_shortcut_modifiers_command_shift" }
+  | { readonly kind: "set_quick_shortcut_modifiers_command_option" }
+  | { readonly kind: "set_quick_shortcut_modifiers_control_shift" }
+  | { readonly kind: "set_quick_shortcut_modifiers_control_option" }
+  | { readonly kind: "set_quick_shortcut_modifiers_command_control" }
+  | { readonly kind: "set_quick_shortcut_modifiers_command_control_shift" }
+  | { readonly kind: "shortcut_active" }
+  | { readonly kind: "shortcut_disabled" }
+  | { readonly kind: "shortcut_unavailable" }
+  | { readonly kind: "shortcut_change_rejected" }
   | { readonly kind: "retry_save" }
   | { readonly kind: "discard_failed_change" }
   | { readonly kind: "retry_boot" }
@@ -305,6 +327,9 @@ export const appearanceMsg = "appearance_changed";
 export const viewUnbound = [
   "revision",
   "settings",
+  "quickShortcutActive",
+  "quickShortcutError",
+  "quickShortcutErrorText",
   "tasks",
   "activeSession",
   "recentSessions",
@@ -347,6 +372,10 @@ export const viewUnbound = [
   "open_settings",
   "raise_settings",
   "close_settings",
+  "shortcut_active",
+  "shortcut_disabled",
+  "shortcut_unavailable",
+  "shortcut_change_rejected",
   "open_quick",
   "raise_quick",
   "close_quick",
@@ -432,6 +461,9 @@ function defaultSettings(): DbSettings {
     longBreakMinutes: 15,
     dailyGoalMinutes: 120,
     soundEnabled: true,
+    quickShortcutEnabled: true,
+    quickShortcutKey: "f",
+    quickShortcutModifiers: "command_shift",
   };
 }
 
@@ -468,6 +500,9 @@ function baseModel(): Model {
     saving: false,
     revision: 0,
     settings: defaultSettings(),
+    quickShortcutActive: false,
+    quickShortcutError: false,
+    quickShortcutErrorText: EMPTY,
     tasks: [],
     activeSession: null,
     recentSessions: [],
@@ -801,6 +836,10 @@ function intentModel(
 }
 
 function settingsIntentModel(model: Model, settings: DbSettings): Model {
+  const changesShortcut =
+    model.settings.quickShortcutEnabled !== settings.quickShortcutEnabled ||
+    model.settings.quickShortcutKey !== settings.quickShortcutKey ||
+    model.settings.quickShortcutModifiers !== settings.quickShortcutModifiers;
   return {
     ...model,
     saving: true,
@@ -811,6 +850,8 @@ function settingsIntentModel(model: Model, settings: DbSettings): Model {
     pendingClockRollback: false,
     pendingNeedsFreshSnapshot: false,
     retryPayload: EMPTY,
+    quickShortcutError: changesShortcut ? false : model.quickShortcutError,
+    quickShortcutErrorText: changesShortcut ? EMPTY : model.quickShortcutErrorText,
   };
 }
 
@@ -1164,6 +1205,65 @@ export function soundEnabled(model: Model): boolean {
   return model.settings.soundEnabled;
 }
 
+export function quickShortcutEnabled(model: Model): boolean {
+  return model.settings.quickShortcutEnabled;
+}
+
+export function quickShortcutKey(model: Model): QuickShortcutKey {
+  return model.settings.quickShortcutKey;
+}
+
+export function quickShortcutModifiers(model: Model): QuickShortcutModifiers {
+  return model.settings.quickShortcutModifiers;
+}
+
+function quickShortcutKeyText(key: QuickShortcutKey): Bytes {
+  if (key === "q") return asciiBytes("Q");
+  if (key === "k") return asciiBytes("K");
+  if (key === "t") return asciiBytes("T");
+  if (key === "p") return asciiBytes("P");
+  if (key === "space") return asciiBytes("Space");
+  return asciiBytes("F");
+}
+
+function quickShortcutModifiersText(modifiers: QuickShortcutModifiers): Bytes {
+  if (modifiers === "command_option") return asciiBytes("Command + Option");
+  if (modifiers === "control_shift") return asciiBytes("Control + Shift");
+  if (modifiers === "control_option") return asciiBytes("Control + Option");
+  if (modifiers === "command_control") return asciiBytes("Command + Control");
+  if (modifiers === "command_control_shift") return asciiBytes("Command + Control + Shift");
+  return asciiBytes("Command + Shift");
+}
+
+export function quickShortcutLabel(model: Model): Bytes {
+  return concat3(
+    quickShortcutModifiersText(model.settings.quickShortcutModifiers),
+    asciiBytes(" + "),
+    quickShortcutKeyText(model.settings.quickShortcutKey),
+  );
+}
+
+export function quickShortcutStatusText(model: Model): Bytes {
+  if (!model.settings.quickShortcutEnabled) return asciiBytes("Disabled");
+  if (model.quickShortcutError) return model.quickShortcutErrorText;
+  if (model.quickShortcutActive) return asciiBytes("Active system-wide while Focus Tracker is running.");
+  return asciiBytes("Checking system availability...");
+}
+
+export function quickShortcutHasError(model: Model): boolean {
+  return model.quickShortcutError;
+}
+
+export function quickShortcutSwitchKey(model: Model): number {
+  const persisted = model.settings.quickShortcutEnabled ? 1 : 0;
+  if (model.hasWriteError && model.pendingKind === "settings") return persisted + 2;
+  // A rejected Carbon registration keeps the persisted value but must still
+  // replace the native switch identity so its pointer-applied value cannot
+  // visually outlive the failed enable/disable attempt.
+  if (model.quickShortcutError) return persisted + 4;
+  return persisted;
+}
+
 // A switch retains the pointer-applied value until its identity changes. Rekey
 // it when the persisted setting flips so the model remains the sole source of
 // truth immediately after the click, not only after reopening Settings.
@@ -1471,6 +1571,10 @@ export function commandMsg(name: string): Msg | null {
   if (name === "app.escape-quick") return { kind: "escape_quick_pressed" };
   if (name === "app.escape-settings") return { kind: "escape_settings_pressed" };
   if (name === "app.quick") return { kind: "open_quick" };
+  if (name === "app.shortcut-active") return { kind: "shortcut_active" };
+  if (name === "app.shortcut-disabled") return { kind: "shortcut_disabled" };
+  if (name === "app.shortcut-unavailable") return { kind: "shortcut_unavailable" };
+  if (name === "app.shortcut-change-rejected") return { kind: "shortcut_change_rejected" };
   if (name === "app.quick-toggle") return { kind: "quick_toggle_command" };
   if (name === "app.quick-end") return { kind: "open_quick_end" };
   if (name === "app.retry") return { kind: "retry_save" };
@@ -1541,6 +1645,19 @@ function startsAuthoritativeWrite(msg: Msg): boolean {
     case "daily_goal_up":
     case "daily_goal_down":
     case "toggle_sound":
+    case "toggle_quick_shortcut":
+    case "set_quick_shortcut_key_f":
+    case "set_quick_shortcut_key_q":
+    case "set_quick_shortcut_key_k":
+    case "set_quick_shortcut_key_t":
+    case "set_quick_shortcut_key_p":
+    case "set_quick_shortcut_key_space":
+    case "set_quick_shortcut_modifiers_command_shift":
+    case "set_quick_shortcut_modifiers_command_option":
+    case "set_quick_shortcut_modifiers_control_shift":
+    case "set_quick_shortcut_modifiers_control_option":
+    case "set_quick_shortcut_modifiers_command_control":
+    case "set_quick_shortcut_modifiers_command_control_shift":
     case "toggle_focus_command":
     case "quick_toggle_command":
     case "space_transport":
@@ -2181,6 +2298,78 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
         settingsIntentModel(model, { ...model.settings, soundEnabled: !model.settings.soundEnabled }),
         Cmd.now("intent_now"),
       ];
+    case "toggle_quick_shortcut":
+      if (model.saving) return model;
+      return [
+        settingsIntentModel(model, {
+          ...model.settings,
+          quickShortcutEnabled: !model.settings.quickShortcutEnabled,
+        }),
+        Cmd.now("intent_now"),
+      ];
+    case "set_quick_shortcut_key_f":
+    case "set_quick_shortcut_key_q":
+    case "set_quick_shortcut_key_k":
+    case "set_quick_shortcut_key_t":
+    case "set_quick_shortcut_key_p":
+    case "set_quick_shortcut_key_space": {
+      let key: QuickShortcutKey = "f";
+      if (msg.kind === "set_quick_shortcut_key_q") key = "q";
+      if (msg.kind === "set_quick_shortcut_key_k") key = "k";
+      if (msg.kind === "set_quick_shortcut_key_t") key = "t";
+      if (msg.kind === "set_quick_shortcut_key_p") key = "p";
+      if (msg.kind === "set_quick_shortcut_key_space") key = "space";
+      if (model.saving || model.settings.quickShortcutKey === key) return model;
+      return [
+        settingsIntentModel(model, { ...model.settings, quickShortcutKey: key }),
+        Cmd.now("intent_now"),
+      ];
+    }
+    case "set_quick_shortcut_modifiers_command_shift":
+    case "set_quick_shortcut_modifiers_command_option":
+    case "set_quick_shortcut_modifiers_control_shift":
+    case "set_quick_shortcut_modifiers_control_option":
+    case "set_quick_shortcut_modifiers_command_control":
+    case "set_quick_shortcut_modifiers_command_control_shift": {
+      let modifiers: QuickShortcutModifiers = "command_shift";
+      if (msg.kind === "set_quick_shortcut_modifiers_command_option") modifiers = "command_option";
+      if (msg.kind === "set_quick_shortcut_modifiers_control_shift") modifiers = "control_shift";
+      if (msg.kind === "set_quick_shortcut_modifiers_control_option") modifiers = "control_option";
+      if (msg.kind === "set_quick_shortcut_modifiers_command_control") modifiers = "command_control";
+      if (msg.kind === "set_quick_shortcut_modifiers_command_control_shift") modifiers = "command_control_shift";
+      if (model.saving || model.settings.quickShortcutModifiers === modifiers) return model;
+      return [
+        settingsIntentModel(model, { ...model.settings, quickShortcutModifiers: modifiers }),
+        Cmd.now("intent_now"),
+      ];
+    }
+    case "shortcut_active":
+      return {
+        ...model,
+        quickShortcutActive: true,
+        quickShortcutError: false,
+        quickShortcutErrorText: EMPTY,
+      };
+    case "shortcut_disabled":
+      return {
+        ...model,
+        quickShortcutActive: false,
+        quickShortcutError: false,
+        quickShortcutErrorText: EMPTY,
+      };
+    case "shortcut_unavailable":
+      return {
+        ...model,
+        quickShortcutActive: false,
+        quickShortcutError: true,
+        quickShortcutErrorText: asciiBytes("macOS could not register this shortcut. It may already be in use."),
+      };
+    case "shortcut_change_rejected":
+      return {
+        ...withoutFailedWrite(model),
+        quickShortcutError: true,
+        quickShortcutErrorText: asciiBytes("That combination is unavailable. Your saved shortcut was not changed."),
+      };
     case "retry_boot":
       return [
         {
@@ -3009,6 +3198,18 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       }
     }
     case "db_err": {
+      if (
+        model.pendingKind === "settings" &&
+        exactAscii(msg.error, asciiBytes("shortcut_unavailable"))
+      ) {
+        return {
+          ...withoutFailedWrite(model),
+          quickShortcutError: true,
+          quickShortcutErrorText: asciiBytes(
+            "That combination is unavailable. Your saved shortcut was not changed.",
+          ),
+        };
+      }
       const stale =
         exactAscii(msg.error, asciiBytes("stale_revision")) || exactAscii(msg.error, asciiBytes("stale_session"));
       if (stale) {
@@ -3116,7 +3317,9 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
         return [next, Cmd.request("focus.db.task.set_state", model.retryPayload, { key: "focus-db", ok: "db_ok", err: "db_err" })];
       }
       if (model.pendingKind === "settings") {
-        return [next, Cmd.request("focus.db.settings.set", model.retryPayload, { key: "focus-db", ok: "db_ok", err: "db_err" })];
+        // Re-enter the normal intent phase so the native hotkey controller can
+        // preflight a failed shortcut change again before SQLite is touched.
+        return [next, Cmd.now("intent_now")];
       }
       if (model.pendingKind === "timer_pause") {
         return [next, Cmd.request("focus.db.timer.pause", model.retryPayload, { key: "focus-db", ok: "db_ok", err: "db_err" })];

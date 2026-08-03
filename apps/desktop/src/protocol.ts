@@ -6,6 +6,14 @@ export type SessionMode = "focus" | "short" | "long";
 export type SessionState = "running" | "paused" | "completed" | "cancelled";
 export type CompletionReason = "none" | "natural" | "manual" | "recovered";
 export type TimerCompleteReason = "natural" | "manual";
+export type QuickShortcutKey = "f" | "q" | "k" | "t" | "p" | "space";
+export type QuickShortcutModifiers =
+  | "command_shift"
+  | "command_option"
+  | "control_shift"
+  | "control_option"
+  | "command_control"
+  | "command_control_shift";
 
 export interface DbSettings {
   readonly focusMinutes: number;
@@ -13,6 +21,9 @@ export interface DbSettings {
   readonly longBreakMinutes: number;
   readonly dailyGoalMinutes: number;
   readonly soundEnabled: boolean;
+  readonly quickShortcutEnabled: boolean;
+  readonly quickShortcutKey: QuickShortcutKey;
+  readonly quickShortcutModifiers: QuickShortcutModifiers;
 }
 
 export interface DbTask {
@@ -275,6 +286,42 @@ function completionReasonFromWire(value: number): CompletionReason {
   return "none";
 }
 
+function quickShortcutKeyFromWire(value: number): QuickShortcutKey {
+  if (value === 1) return "q";
+  if (value === 2) return "k";
+  if (value === 3) return "t";
+  if (value === 4) return "p";
+  if (value === 5) return "space";
+  return "f";
+}
+
+function quickShortcutModifiersFromWire(value: number): QuickShortcutModifiers {
+  if (value === 1) return "command_option";
+  if (value === 2) return "control_shift";
+  if (value === 3) return "control_option";
+  if (value === 4) return "command_control";
+  if (value === 5) return "command_control_shift";
+  return "command_shift";
+}
+
+function quickShortcutKeyWire(value: QuickShortcutKey): number {
+  if (value === "q") return 1;
+  if (value === "k") return 2;
+  if (value === "t") return 3;
+  if (value === "p") return 4;
+  if (value === "space") return 5;
+  return 0;
+}
+
+function quickShortcutModifiersWire(value: QuickShortcutModifiers): number {
+  if (value === "command_option") return 1;
+  if (value === "control_shift") return 2;
+  if (value === "control_option") return 3;
+  if (value === "command_control") return 4;
+  if (value === "command_control_shift") return 5;
+  return 0;
+}
+
 function settingsValid(settings: DbSettings): boolean {
   return (
     settings.focusMinutes >= 1 &&
@@ -404,6 +451,9 @@ function decodeFailure(detail: Bytes): SnapshotDecode {
       longBreakMinutes: 15,
       dailyGoalMinutes: 120,
       soundEnabled: true,
+      quickShortcutEnabled: true,
+      quickShortcutKey: "f",
+      quickShortcutModifiers: "command_shift",
     },
     nextTaskId: 1,
     tasks: [],
@@ -429,7 +479,7 @@ export function decodeSnapshot(data: Bytes): SnapshotDecode {
     return decodeFailure(asciiBytes("invalid database snapshot header"));
   }
   const version = reader.u32();
-  if (version !== 2) {
+  if (version !== 3) {
     return decodeFailure(asciiBytes("unsupported database snapshot version"));
   }
   const revision = reader.u64();
@@ -438,14 +488,26 @@ export function decodeSnapshot(data: Bytes): SnapshotDecode {
   const longBreakMinutes = reader.u32();
   const dailyGoalMinutes = reader.u32();
   const soundWire = reader.u8();
+  const quickShortcutEnabledWire = reader.u8();
+  const quickShortcutModifiersWireValue = reader.u8();
+  const quickShortcutKeyWireValue = reader.u8();
   const settings: DbSettings = {
     focusMinutes: focusMinutes,
     shortBreakMinutes: shortBreakMinutes,
     longBreakMinutes: longBreakMinutes,
     dailyGoalMinutes: dailyGoalMinutes,
     soundEnabled: soundWire === 1,
+    quickShortcutEnabled: quickShortcutEnabledWire === 1,
+    quickShortcutKey: quickShortcutKeyFromWire(quickShortcutKeyWireValue),
+    quickShortcutModifiers: quickShortcutModifiersFromWire(quickShortcutModifiersWireValue),
   };
-  if (soundWire > 1 || !settingsValid(settings)) reader.failed = true;
+  if (
+    soundWire > 1 ||
+    quickShortcutEnabledWire > 1 ||
+    quickShortcutModifiersWireValue > 5 ||
+    quickShortcutKeyWireValue > 5 ||
+    !settingsValid(settings)
+  ) reader.failed = true;
 
   const nextTaskId = reader.u64();
   const taskCount = reader.u32();
@@ -602,7 +664,7 @@ export function encodeTaskPurge(revision: number, nowMs: number, taskId: number)
 }
 
 export function encodeSettings(revision: number, nowMs: number, settings: DbSettings): Bytes {
-  const out = new Uint8Array(41);
+  const out = new Uint8Array(44);
   out.set(mutationPrefix(revision, nowMs), 0);
   out.set(encodeU32Part(settings.focusMinutes), 24);
   out.set(encodeU32Part(settings.shortBreakMinutes), 28);
@@ -611,6 +673,11 @@ export function encodeSettings(revision: number, nowMs: number, settings: DbSett
   let soundWire = 0;
   if (settings.soundEnabled) soundWire = 1;
   out[40] = soundWire;
+  let quickShortcutEnabledWire = 0;
+  if (settings.quickShortcutEnabled) quickShortcutEnabledWire = 1;
+  out[41] = quickShortcutEnabledWire;
+  out[42] = quickShortcutModifiersWire(settings.quickShortcutModifiers);
+  out[43] = quickShortcutKeyWire(settings.quickShortcutKey);
   return out;
 }
 

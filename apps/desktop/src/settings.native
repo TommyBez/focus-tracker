@@ -137,6 +137,66 @@
     </column>
   </row>
 
+  <column
+    background="surface_subtle"
+    radius="lg"
+    padding="16"
+    gap="12"
+    label="Quick Focus global shortcut settings"
+  >
+    <row gap="16" cross="center">
+      <column grow="1" gap="4">
+        <text><span weight="medium">Global Quick Focus shortcut</span></text>
+        <text size="sm" foreground="text_muted" wrap="true">Open Quick Focus from any app while Focus Tracker is running.</text>
+      </column>
+      <text size="sm" foreground="text_muted"><span mono="true" weight="medium">{quickShortcutLabel}</span></text>
+      <switch
+        key="{quickShortcutSwitchKey}"
+        checked="{quickShortcutEnabled}"
+        disabled="{saving or hasWriteError}"
+        label="Enable the global Quick Focus shortcut"
+        on-toggle="toggle_quick_shortcut"
+      />
+    </row>
+
+    <separator />
+
+    <row gap="20" cross="start">
+      <column grow="1" gap="6">
+        <text size="sm" foreground="text_muted">Modifiers</text>
+        <toggle-group label="Global shortcut modifiers, Command combinations" gap="2">
+          <toggle-button size="sm" selected="{quickShortcutModifiers == 'command_shift'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_modifiers_command_shift">Cmd + Shift</toggle-button>
+          <toggle-button size="sm" selected="{quickShortcutModifiers == 'command_option'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_modifiers_command_option">Cmd + Option</toggle-button>
+          <toggle-button size="sm" selected="{quickShortcutModifiers == 'command_control'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_modifiers_command_control">Cmd + Ctrl</toggle-button>
+        </toggle-group>
+        <toggle-group label="Global shortcut modifiers, Control combinations" gap="2">
+          <toggle-button size="sm" selected="{quickShortcutModifiers == 'control_shift'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_modifiers_control_shift">Ctrl + Shift</toggle-button>
+          <toggle-button size="sm" selected="{quickShortcutModifiers == 'control_option'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_modifiers_control_option">Ctrl + Option</toggle-button>
+          <toggle-button size="sm" selected="{quickShortcutModifiers == 'command_control_shift'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_modifiers_command_control_shift">Cmd + Ctrl + Shift</toggle-button>
+        </toggle-group>
+      </column>
+
+      <column width="252" gap="6">
+        <text size="sm" foreground="text_muted">Key</text>
+        <toggle-group label="Global shortcut key" gap="2">
+          <toggle-button size="sm" selected="{quickShortcutKey == 'f'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_key_f">F</toggle-button>
+          <toggle-button size="sm" selected="{quickShortcutKey == 'q'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_key_q">Q</toggle-button>
+          <toggle-button size="sm" selected="{quickShortcutKey == 'k'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_key_k">K</toggle-button>
+          <toggle-button size="sm" selected="{quickShortcutKey == 't'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_key_t">T</toggle-button>
+          <toggle-button size="sm" selected="{quickShortcutKey == 'p'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_key_p">P</toggle-button>
+          <toggle-button size="sm" selected="{quickShortcutKey == 'space'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_key_space">Space</toggle-button>
+        </toggle-group>
+      </column>
+    </row>
+
+    <if test="{quickShortcutHasError}">
+      <text size="sm" foreground="destructive" wrap="true">{quickShortcutStatusText}</text>
+    </if>
+    <else>
+      <text size="sm" foreground="text_muted" wrap="true">{quickShortcutStatusText}</text>
+    </else>
+  </column>
+
   <if test="{saving or hasWriteError}">
     <if test="{saving}">
       <row height="32" gap="8" cross="center" label="Saving settings">

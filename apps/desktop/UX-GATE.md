@@ -37,6 +37,7 @@ database and repeat the persistence-sensitive journeys after relaunch.
 | F11 | Block length | Set a non-preset length with the stepper, start it, and confirm the session's planned duration matches without a preference write; confirm Settings still owns the persisted default |
 | F12 | Mid-block capture | Add, rename, complete, and archive other tasks while a block runs; confirm the running task's own row refuses completion and archiving and that the session survives every write |
 | F13 | Completion is never skipped | With a recorded block awaiting its task decision, confirm the transport shortcut and the menu-bar toggle refuse to start the next block; and that a task or preference write landing exactly on the deadline still surfaces the completion review rather than collapsing to idle |
+| F14 | Global Quick Focus shortcut | With another app frontmost, open and refocus the single Quick Focus window; change the combination and prove the old one stops while the new one works, then disable and relaunch to verify SQLite persistence. A rejected combination must leave the saved shortcut unchanged and keep its prior runtime state |
 
 For every journey record task success, critical errors, recovery success,
 unexpected windows, input-to-feedback latency, focus order, and the final
