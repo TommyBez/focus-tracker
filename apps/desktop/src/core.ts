@@ -126,6 +126,10 @@ export interface Model {
   readonly recentSessions: readonly DbSession[];
   readonly stats: DbStats;
   readonly taskDraftEditor: TextEditState;
+  // The length of the block you are about to start. It is seeded from the
+  // persisted default and adjusted freely on Today or in Quick Focus without
+  // touching SQLite; Settings still owns the durable default.
+  readonly focusDraftMinutes: number;
   readonly composerKey: number;
   readonly startAutofocus: boolean;
   readonly mainStartFocusEpoch: number;
@@ -198,6 +202,11 @@ export type Msg =
   | { readonly kind: "set_duration_25" }
   | { readonly kind: "set_duration_50" }
   | { readonly kind: "set_duration_90" }
+  | { readonly kind: "use_duration_25" }
+  | { readonly kind: "use_duration_50" }
+  | { readonly kind: "use_duration_90" }
+  | { readonly kind: "lengthen_focus" }
+  | { readonly kind: "shorten_focus" }
   | { readonly kind: "start_focus" }
   | { readonly kind: "pause_focus" }
   | { readonly kind: "resume_focus" }
@@ -228,6 +237,14 @@ export type Msg =
   | { readonly kind: "set_daily_goal_60" }
   | { readonly kind: "set_daily_goal_120" }
   | { readonly kind: "set_daily_goal_180" }
+  | { readonly kind: "default_focus_up" }
+  | { readonly kind: "default_focus_down" }
+  | { readonly kind: "short_break_up" }
+  | { readonly kind: "short_break_down" }
+  | { readonly kind: "long_break_up" }
+  | { readonly kind: "long_break_down" }
+  | { readonly kind: "daily_goal_up" }
+  | { readonly kind: "daily_goal_down" }
   | { readonly kind: "toggle_sound" }
   | { readonly kind: "retry_save" }
   | { readonly kind: "discard_failed_change" }
@@ -298,6 +315,7 @@ export const viewUnbound = [
   "dialogSurface",
   "taskDraftEditor",
   "editDraftEditor",
+  "focusDraftMinutes",
   "mainStartFocusEpoch",
   "quickStartFocusEpoch",
   "editFocusEpoch",
@@ -368,6 +386,22 @@ const DEFAULT_PANE = 0.27;
 const FOCUS_PANE = 0.24;
 const MAX_SAFE_TIME = 9007199254740991;
 
+// Duration bounds. SQLite already accepts any focus length from 1 to 180
+// minutes, so the interface no longer has to pretend the product only has
+// three lengths. Every stepper below stays inside the protocol's range.
+const FOCUS_STEP = 5;
+const FOCUS_MIN = 5;
+const FOCUS_MAX = 180;
+const SHORT_BREAK_STEP = 1;
+const SHORT_BREAK_MIN = 1;
+const SHORT_BREAK_MAX = 30;
+const LONG_BREAK_STEP = 5;
+const LONG_BREAK_MIN = 5;
+const LONG_BREAK_MAX = 60;
+const GOAL_STEP = 15;
+const GOAL_MIN = 15;
+const GOAL_MAX = 600;
+
 function emptyEditor(): TextEditState {
   return { text: EMPTY, selection: { anchor: 0, focus: 0 }, composition: null };
 }
@@ -436,6 +470,7 @@ function baseModel(): Model {
     recentSessions: [],
     stats: emptyStats(),
     taskDraftEditor: emptyEditor(),
+    focusDraftMinutes: 25,
     composerKey: 1,
     startAutofocus: true,
     mainStartFocusEpoch: 1,
@@ -573,6 +608,33 @@ function normalizedActionTaskId(tasks: readonly DbTask[], filter: TaskFilter, se
 
 function durationMs(minutes: number): number {
   return minutes * 60000;
+}
+
+function clamped(value: number, low: number, high: number): number {
+  if (value < low) return low;
+  if (value > high) return high;
+  return value;
+}
+
+// Step to the next multiple of `step` in the requested direction so a value
+// arriving from an odd preset (or an older database) still lands on a round
+// number instead of inheriting the offset forever.
+function stepped(value: number, step: number, up: boolean, low: number, high: number): number {
+  const offset = value % step;
+  const next = up ? value + step - offset : offset === 0 ? value - step : value - offset;
+  return clamped(next, low, high);
+}
+
+function minutesText(minutes: number): Bytes {
+  if (minutes < 60) return asciiBytes(`${minutes} min`);
+  const hours = intDiv(minutes, 60);
+  const rest = minutes % 60;
+  if (rest === 0) return asciiBytes(`${hours} h`);
+  return asciiBytes(`${hours} h ${rest} min`);
+}
+
+function wholeMinutes(milliseconds: number): number {
+  return intDiv(milliseconds, 60000);
 }
 
 function validWallNow(value: number): boolean {
@@ -967,11 +1029,11 @@ export function quickControlsDisabled(model: Model): boolean {
 }
 
 export function quickStartLabel(model: Model): Bytes {
-  return asciiBytes(`Start ${model.settings.focusMinutes} minutes`);
+  return asciiBytes(`Start ${focusLengthMinutes(model)} minutes`);
 }
 
 export function selectedFocusIntervalLabel(model: Model): Bytes {
-  return asciiBytes(`Selected focus interval, ${model.settings.focusMinutes} minutes`);
+  return asciiBytes(`Selected focus interval, ${focusLengthMinutes(model)} minutes`);
 }
 
 export function mainEndDialogOpen(model: Model): boolean {
@@ -1035,7 +1097,17 @@ export function focusTaskTitle(model: Model): Bytes {
 
 export function focusLengthMinutes(model: Model): number {
   if (model.activeSession !== null) return intDiv(model.activeSession.plannedMs, 60000);
-  return model.settings.focusMinutes;
+  return model.focusDraftMinutes;
+}
+
+// The block you are about to start is adjustable to the minute-range SQLite
+// already accepts. These two guards keep the steppers honest at the edges.
+export function canLengthenFocus(model: Model): boolean {
+  return !model.saving && !model.hasWriteError && model.focusDraftMinutes < FOCUS_MAX;
+}
+
+export function canShortenFocus(model: Model): boolean {
+  return !model.saving && !model.hasWriteError && model.focusDraftMinutes > FOCUS_MIN;
 }
 
 export function settingsFocusMinutes(model: Model): number {
@@ -1056,6 +1128,11 @@ function nextBreakIsLong(model: Model): boolean {
 
 export function nextBreakMinutes(model: Model): number {
   return nextBreakIsLong(model) ? model.settings.longBreakMinutes : model.settings.shortBreakMinutes;
+}
+
+export function nextBreakText(model: Model): Bytes {
+  const label = nextBreakIsLong(model) ? asciiBytes("Long break ") : asciiBytes("Short break ");
+  return concat2(label, minutesText(nextBreakMinutes(model)));
 }
 
 export function dailyGoalMinutes(model: Model): number {
@@ -1252,6 +1329,82 @@ export function weekSessionText(model: Model): Bytes {
   return count === 1 ? asciiBytes("1 recent block") : asciiBytes(`${count} recent blocks`);
 }
 
+// ------------------------------------------------------------ Today panel
+//
+// The focus chamber earns its space by answering the three questions a timer
+// screen is actually asked: how much have I focused today, how many blocks is
+// that, and how far is the goal. Every number below comes from the same
+// authoritative snapshot the ledger renders.
+
+export function todayFocusText(model: Model): Bytes {
+  if (model.stats.todayFocusMs === 0) return asciiBytes("0 min");
+  if (model.stats.todayFocusMs < 60000) return asciiBytes("<1 min");
+  return minutesText(wholeMinutes(model.stats.todayFocusMs));
+}
+
+export function todayBlockCount(model: Model): number {
+  return model.stats.todayCompletedSessions;
+}
+
+export function todayGoalRemainingText(model: Model): Bytes {
+  const goalMs = model.settings.dailyGoalMinutes * 60000;
+  if (model.stats.todayFocusMs >= goalMs) return asciiBytes("Daily goal reached");
+  const restMinutes = intDiv(goalMs - model.stats.todayFocusMs + 59999, 60000);
+  return concat2(minutesText(restMinutes), asciiBytes(" to go"));
+}
+
+export function todayGoalReached(model: Model): boolean {
+  return model.stats.todayFocusMs >= model.settings.dailyGoalMinutes * 60000;
+}
+
+export function weekActiveDays(model: Model): number {
+  return model.stats.weekFocusMs.filter((day) => day.milliseconds > 0).length;
+}
+
+export function weekAverageText(model: Model): Bytes {
+  const active = weekActiveDays(model);
+  if (active === 0) return asciiBytes("0 min");
+  const total = model.stats.weekFocusMs.reduce((sum, day) => sum + day.milliseconds, 0);
+  const average = wholeMinutes(intDiv(total, active));
+  return average === 0 ? asciiBytes("<1 min") : minutesText(average);
+}
+
+export function weekBestText(model: Model): Bytes {
+  let best = 0;
+  for (const day of model.stats.weekFocusMs) {
+    if (day.milliseconds > best) best = day.milliseconds;
+  }
+  if (best === 0) return asciiBytes("0 min");
+  const minutes = wholeMinutes(best);
+  return minutes === 0 ? asciiBytes("<1 min") : minutesText(minutes);
+}
+
+export function hasAnyTask(model: Model): boolean {
+  return model.tasks.length > 0;
+}
+
+// The row for the task a block is currently running against must not offer to
+// complete it mid-flight; every other row stays live so an interruption can be
+// captured or cleared without breaking focus.
+export function activeFocusTaskId(model: Model): number {
+  return model.activeSession === null ? 0 : model.activeSession.taskId;
+}
+
+export function focusing(model: Model): boolean {
+  return model.activeSession !== null;
+}
+
+export function sessionElapsedText(model: Model): Bytes {
+  if (model.activeSession === null) return EMPTY;
+  const planned = model.activeSession.plannedMs;
+  const elapsed = planned - remainingMs(model);
+  return asciiBytes(`${wholeMinutes(elapsed)} of ${wholeMinutes(planned)} min`);
+}
+
+export function blockRankText(model: Model): Bytes {
+  return asciiBytes(`Block ${model.stats.todayCompletedSessions + 1} today`);
+}
+
 function focusedDurationPhrase(milliseconds: number): Bytes {
   if (milliseconds < 60000) return asciiBytes("Less than 1 focused minute");
   const minutes = intDiv(milliseconds, 60000);
@@ -1347,6 +1500,14 @@ function startsAuthoritativeWrite(msg: Msg): boolean {
     case "set_daily_goal_60":
     case "set_daily_goal_120":
     case "set_daily_goal_180":
+    case "default_focus_up":
+    case "default_focus_down":
+    case "short_break_up":
+    case "short_break_down":
+    case "long_break_up":
+    case "long_break_down":
+    case "daily_goal_up":
+    case "daily_goal_down":
     case "toggle_sound":
     case "toggle_focus_command":
     case "quick_toggle_command":
@@ -1378,7 +1539,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       const title = model.taskDraftEditor.text.trim();
       if (title.length === 0) return model;
       return [
-        intentModel({ ...model, startAutofocus: false }, "task_create", 0, "open", title, "focus", model.settings.focusMinutes),
+        intentModel({ ...model, startAutofocus: false }, "task_create", 0, "open", title, "focus", model.focusDraftMinutes),
         Cmd.now("intent_now"),
       ];
     }
@@ -1402,7 +1563,8 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
         task === null ||
         task.state !== model.taskFilter ||
         task.state === "archived" ||
-        sessionState(model) !== "idle"
+        // The task a block is running against is owned by the transport.
+        task.id === activeFocusTaskId(model)
       ) return model;
       return {
         ...model,
@@ -1428,6 +1590,9 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       if (model.saving) return model;
       const task = taskById(model.tasks, msg.id);
       if (task === null || task.state === "archived") return model;
+      // Completing the task a block is running against would leave the live
+      // session pointing at finished work. The transport resolves it instead.
+      if (task.id === activeFocusTaskId(model)) return model;
       const nextState: TaskState = task.state === "completed" ? "open" : "completed";
       return [
         intentModel(withoutFocusRecovery(model), "task_state", task.id, nextState, EMPTY, "focus", 0),
@@ -1444,7 +1609,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
         taskFilter: "open",
       };
       return [
-        intentModel(selected, "timer_start", msg.id, "open", EMPTY, "focus", model.settings.focusMinutes),
+        intentModel(selected, "timer_start", msg.id, "open", EMPTY, "focus", model.focusDraftMinutes),
         Cmd.now("intent_now"),
       ];
     }
@@ -1492,6 +1657,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       if (model.saving) return model;
       const task = taskById(model.tasks, msg.id);
       if (task === null || task.state === "archived") return model;
+      if (task.id === activeFocusTaskId(model)) return model;
       return [
         intentModel(
           { ...withoutFocusRecovery(model), taskActionsTaskId: -1 },
@@ -1618,6 +1784,25 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
         settingsIntentModel(model, { ...model.settings, focusMinutes: 90 }),
         Cmd.now("intent_now"),
       ];
+    // Choosing the length of the next block is a local decision, not a
+    // preference change: it commits nothing to SQLite and never blocks on a
+    // pending write, so the control stays instant however fast it is used.
+    case "use_duration_25":
+      return { ...model, focusDraftMinutes: 25 };
+    case "use_duration_50":
+      return { ...model, focusDraftMinutes: 50 };
+    case "use_duration_90":
+      return { ...model, focusDraftMinutes: 90 };
+    case "lengthen_focus":
+      return {
+        ...model,
+        focusDraftMinutes: stepped(model.focusDraftMinutes, FOCUS_STEP, true, FOCUS_MIN, FOCUS_MAX),
+      };
+    case "shorten_focus":
+      return {
+        ...model,
+        focusDraftMinutes: stepped(model.focusDraftMinutes, FOCUS_STEP, false, FOCUS_MIN, FOCUS_MAX),
+      };
     case "start_focus":
       if (model.saving || hasBlockingDialog(model) || model.activeSession !== null || !eligibleTask(model, model.selectedTaskId)) return model;
       return [
@@ -1628,7 +1813,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
           "open",
           EMPTY,
           "focus",
-          model.settings.focusMinutes,
+          model.focusDraftMinutes,
         ),
         Cmd.now("intent_now"),
       ];
@@ -1891,6 +2076,70 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
         settingsIntentModel(model, { ...model.settings, dailyGoalMinutes: 180 }),
         Cmd.now("intent_now"),
       ];
+    // Settings owns the durable defaults, so its steppers do commit. Each one
+    // clamps inside the range the SQLite validator already enforces, which is
+    // wider than the three presets the first release exposed.
+    case "default_focus_up":
+    case "default_focus_down": {
+      if (model.saving) return model;
+      const focusMinutes = stepped(
+        model.settings.focusMinutes,
+        FOCUS_STEP,
+        msg.kind === "default_focus_up",
+        FOCUS_MIN,
+        FOCUS_MAX,
+      );
+      if (focusMinutes === model.settings.focusMinutes) return model;
+      return [settingsIntentModel(model, { ...model.settings, focusMinutes: focusMinutes }), Cmd.now("intent_now")];
+    }
+    case "short_break_up":
+    case "short_break_down": {
+      if (model.saving) return model;
+      const shortBreakMinutes = stepped(
+        model.settings.shortBreakMinutes,
+        SHORT_BREAK_STEP,
+        msg.kind === "short_break_up",
+        SHORT_BREAK_MIN,
+        SHORT_BREAK_MAX,
+      );
+      if (shortBreakMinutes === model.settings.shortBreakMinutes) return model;
+      return [
+        settingsIntentModel(model, { ...model.settings, shortBreakMinutes: shortBreakMinutes }),
+        Cmd.now("intent_now"),
+      ];
+    }
+    case "long_break_up":
+    case "long_break_down": {
+      if (model.saving) return model;
+      const longBreakMinutes = stepped(
+        model.settings.longBreakMinutes,
+        LONG_BREAK_STEP,
+        msg.kind === "long_break_up",
+        LONG_BREAK_MIN,
+        LONG_BREAK_MAX,
+      );
+      if (longBreakMinutes === model.settings.longBreakMinutes) return model;
+      return [
+        settingsIntentModel(model, { ...model.settings, longBreakMinutes: longBreakMinutes }),
+        Cmd.now("intent_now"),
+      ];
+    }
+    case "daily_goal_up":
+    case "daily_goal_down": {
+      if (model.saving) return model;
+      const dailyGoalMinutes = stepped(
+        model.settings.dailyGoalMinutes,
+        GOAL_STEP,
+        msg.kind === "daily_goal_up",
+        GOAL_MIN,
+        GOAL_MAX,
+      );
+      if (dailyGoalMinutes === model.settings.dailyGoalMinutes) return model;
+      return [
+        settingsIntentModel(model, { ...model.settings, dailyGoalMinutes: dailyGoalMinutes }),
+        Cmd.now("intent_now"),
+      ];
+    }
     case "toggle_sound":
       if (model.saving) return model;
       return [
@@ -1965,7 +2214,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
             "open",
             EMPTY,
             "focus",
-            model.settings.focusMinutes,
+            model.focusDraftMinutes,
           ),
           Cmd.now("intent_now"),
         ];
@@ -1999,7 +2248,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
             "open",
             EMPTY,
             "focus",
-            model.settings.focusMinutes,
+            model.focusDraftMinutes,
           ),
           Cmd.now("intent_now"),
         ];
@@ -2194,7 +2443,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
         pendingClockRollback: at < model.nowMs,
       };
       if (model.pendingKind === "task_create") {
-        const payload = encodeTaskCreate(model.revision, at, model.settings.focusMinutes, model.pendingTitle);
+        const payload = encodeTaskCreate(model.revision, at, model.focusDraftMinutes, model.pendingTitle);
         return [
           { ...pending, retryPayload: payload },
           Cmd.request("focus.db.task.create", payload, { key: "focus-db", ok: "db_ok", err: "db_err" }),
@@ -2353,8 +2602,23 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
           action = created.id;
         }
       }
+      // The next block's length follows the persisted default whenever the
+      // default itself is authoritative again: at boot, when Settings commits,
+      // and once the block it was chosen for has been resolved. Anything else
+      // (a task edit, an archive, a pause) leaves the user's choice alone.
+      const draftFollowsDefault =
+        operation === "load" ||
+        operation === "settings" ||
+        operation === "timer_cancel" ||
+        operation === "timer_complete_natural" ||
+        operation === "timer_complete_manual" ||
+        operation === "task_after_focus";
+      const draftMinutes = draftFollowsDefault
+        ? clamped(snapshot.settings.focusMinutes, FOCUS_MIN, FOCUS_MAX)
+        : clamped(model.focusDraftMinutes, FOCUS_MIN, FOCUS_MAX);
       let next: Model = {
         ...model,
+        focusDraftMinutes: draftMinutes,
         loadState: "ready",
         fatalErrorText: EMPTY,
         hasWriteError: false,
@@ -2899,7 +3163,11 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
     case "chrome_changed": {
       const leading = msg.buttons.x + msg.buttons.width + 12;
       const height = msg.insets.top > 52 ? msg.insets.top : 52;
-      return { ...model, chromeLeading: leading > 12 ? leading : 70, headerHeight: height };
+      // Window controls reported outside the leading corner (a trailing-button
+      // host, or an inset the platform has not settled yet) must not translate
+      // into a gutter wide enough to push the title bar off its own window.
+      const gutter = leading > 12 && leading <= 220 ? leading : 70;
+      return { ...model, chromeLeading: gutter, headerHeight: height };
     }
     case "appearance_changed":
       return {

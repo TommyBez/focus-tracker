@@ -8,7 +8,7 @@
 <stack role="group" label="Quick Focus">
   <column background="background" grow="1" padding="12" gap="12" label="Quick Focus controller">
     <row padding="4" gap="12" cross="center">
-      <column gap="4" grow="1">
+      <column gap="2" grow="1">
         <text><span weight="bold">Quick Focus</span></text>
         <text size="sm" foreground="text_muted">{todayGoalText}</text>
       </column>
@@ -134,11 +134,29 @@
 
             <column padding="4" gap="8" label="Choose duration, then start">
               <row gap="8" cross="center">
-                <text grow="1"><span weight="medium">Duration</span></text>
-                <toggle-group label="Focus length in minutes" gap="2">
-                  <toggle-button size="sm" selected="{focusLengthMinutes == 25}" disabled="{quickControlsDisabled}" on-toggle="set_duration_25">25 min</toggle-button>
-                  <toggle-button size="sm" selected="{focusLengthMinutes == 50}" disabled="{quickControlsDisabled}" on-toggle="set_duration_50">50 min</toggle-button>
-                  <toggle-button size="sm" selected="{focusLengthMinutes == 90}" disabled="{quickControlsDisabled}" on-toggle="set_duration_90">90 min</toggle-button>
+                <button
+                  size="icon"
+                  variant="outline"
+                  icon="chevron-down"
+                  label="Shorten this block by 5 minutes"
+                  disabled="{not canShortenFocus}"
+                  on-press="shorten_focus"
+                ></button>
+                <text grow="1" text-alignment="center" label="{selectedFocusIntervalLabel}"><span mono="true" weight="medium">{focusLengthMinutes} min block</span></text>
+                <button
+                  size="icon"
+                  variant="outline"
+                  icon="chevron-up"
+                  label="Lengthen this block by 5 minutes"
+                  disabled="{not canLengthenFocus}"
+                  on-press="lengthen_focus"
+                ></button>
+              </row>
+              <row>
+                <toggle-group grow="1" label="Focus length presets" gap="2">
+                  <toggle-button grow="1" size="sm" selected="{focusLengthMinutes == 25}" on-toggle="use_duration_25">25 min</toggle-button>
+                  <toggle-button grow="1" size="sm" selected="{focusLengthMinutes == 50}" on-toggle="use_duration_50">50 min</toggle-button>
+                  <toggle-button grow="1" size="sm" selected="{focusLengthMinutes == 90}" on-toggle="use_duration_90">90 min</toggle-button>
                 </toggle-group>
               </row>
               <button key="{quickStartFocusKey}" grow="1" variant="primary" icon="play" autofocus="{startAutofocus}" disabled="{not quickCanStart}" on-press="start_focus">{quickStartLabel}</button>
@@ -167,6 +185,10 @@
                   <else>
                     <progress value="{focusProgress}" label="Focus block progress" />
                   </else>
+                  <row>
+                    <text size="sm" grow="1" foreground="text_muted">{sessionElapsedText}</text>
+                    <text size="sm" foreground="text_muted">{percent(focusProgress)}</text>
+                  </row>
                   <row gap="8" label="Timer transport controls">
                     <button key="running-primary" grow="1" variant="secondary" icon="pause" autofocus="{transportAutofocus and not endDialogOpen}" disabled="{quickControlsDisabled}" on-press="pause_focus">Pause</button>
                     <button grow="1" variant="ghost" disabled="{saving or hasWriteError}" on-press="request_quick_end_focus">Finish…</button>
@@ -187,6 +209,10 @@
                   <else>
                     <progress value="{focusProgress}" label="Paused focus block progress" />
                   </else>
+                  <row>
+                    <text size="sm" grow="1" foreground="text_muted">{sessionElapsedText}</text>
+                    <text size="sm" foreground="text_muted">{percent(focusProgress)}</text>
+                  </row>
                   <row gap="8" label="Paused timer transport controls">
                     <button key="paused-primary" grow="1" variant="primary" icon="play" autofocus="{transportAutofocus and not endDialogOpen}" disabled="{quickControlsDisabled}" on-press="resume_focus">Resume</button>
                     <button grow="1" variant="ghost" disabled="{saving or hasWriteError}" on-press="request_quick_end_focus">Finish…</button>
@@ -196,10 +222,13 @@
 
               <if test="{sessionState == 'complete' and quickCompletionDialogOpen}">
                 <column background="surface_subtle" radius="xl" padding="16" gap="12" main="center" label="Recorded focus block and optional task choices">
-                  <column gap="4">
-                    <text><span weight="bold">Focus recorded</span></text>
-                    <text size="sm" foreground="text_muted">{quickCompletionSummary}</text>
-                  </column>
+                  <row gap="8" cross="center">
+                    <icon name="check-circle" foreground="success" />
+                    <column gap="2" grow="1">
+                      <text><span weight="bold">Focus recorded</span></text>
+                      <text size="sm" foreground="text_muted">{quickCompletionSummary}</text>
+                    </column>
+                  </row>
                   <text overflow="ellipsis" text-alignment="center">{quickTaskTitle}</text>
                   <text wrap="true" text-alignment="center" size="sm" foreground="text_muted">The task is still open. You can reverse a completed task later.</text>
                   <column gap="8">

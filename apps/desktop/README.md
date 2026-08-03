@@ -11,17 +11,40 @@ a precision timer chamber joined by the animated **Focus Gate** split. The app
 uses native controls, system light/dark/high-contrast appearances, and reduced
 motion behavior.
 
+The chamber is composed as an instrument rather than a form. It states the
+block about to start (or running), the length being committed, and — pinned
+under every state — what the day already contains. The workspace switcher in
+the titlebar names the section, so the pane never spends height repeating a
+heading above the timer.
+
 ## Product scope
 
-- Add, rename, complete, archive, restore, and select tasks.
-- Commit a 25, 50, or 90 minute focus block to one task.
+- Add, rename, complete, archive, restore, and select tasks, including while a
+  block is running: an interruption belongs in the ledger, not in your head.
+- Commit a focus block of any length from 5 to 180 minutes to one task. The
+  25/50/90 presets and a ±5 minute stepper set *this* block; Settings owns the
+  durable default and is the only place a duration is written to SQLite.
 - Pause, resume, finish, cancel, and recover a block across sleep or relaunch.
-- Configure break lengths, daily focus goal, and completion sound.
-- Review today’s totals, a seven-day focus chart, and recent sessions.
+- Configure default focus length, break lengths, daily focus goal, and
+  completion sound, each with presets plus a stepper over the full range the
+  database accepts.
+- See today’s recorded focus, block count, seven-day total, and goal progress
+  under the timer at every moment, from the same snapshot the Ledger renders.
+- Review a seven-day focus chart, days focused, average active day, best day,
+  and recent sessions.
 - Keep an active timer running when the main window is hidden.
 - Control the current block from a real macOS menu-bar item.
-- Open a 392 pt Quick Focus companion to add/select work, start, pause,
-  resume, finish, and resolve a completed block without opening the ledger.
+- Open a 392 pt Quick Focus companion to add/select work, set the block length,
+  start, pause, resume, finish, and resolve a completed block without opening
+  the ledger.
+
+The task a block is running against is owned by the transport: its row cannot
+be completed or archived mid-flight, and it is labelled in the rail. Every
+other row stays live.
+
+The Today strip and the Ledger tiles state recorded facts only. The product
+carries no streak, score, or attention grade, and nothing in the interface
+nudges a session that has not happened.
 
 Cloud sync, accounts, projects, tags, due dates, and collaboration are
 deliberately outside the first release.
@@ -69,6 +92,11 @@ database is surfaced as a recovery error and is never silently replaced.
 | `⌘,` | Settings |
 | `⌘⇧Space` | Start, pause, or resume the current focus block |
 | `⌘⇧F` | Open or refocus Quick Focus |
+
+`⌘⇧Space` starts the block at the length currently shown in the chamber, which
+is the persisted default until the stepper or a preset changes it for this
+block only. A completed, cancelled, or newly loaded session returns the
+chamber to the persisted default.
 
 The window close button hides the app while an active timer continues. Quitting
 the application is a distinct, explicit action.

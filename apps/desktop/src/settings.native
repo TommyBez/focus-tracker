@@ -1,6 +1,8 @@
 <!--
   Preferences commit immediately through the authoritative SQLite snapshot.
-  The fixed-size macOS window keeps the controls dense, grouped, and calm.
+  Each row pairs the three common presets with a stepper, so the defaults are
+  no longer limited to the three values the first release could express —
+  SQLite has always accepted the full range shown in each row's caption.
 -->
 <column background="background" grow="1" padding="16" gap="12" label="Focus Tracker settings">
   <!--
@@ -18,7 +20,7 @@
     >
       <column gap="4">
         <text><span weight="medium">Timer defaults</span></text>
-        <text size="sm" foreground="text_muted">Default lengths for focus and breaks.</text>
+        <text size="sm" wrap="true" foreground="text_muted">Starting lengths. Today can still adjust a single block without changing these.</text>
       </column>
 
       <separator />
@@ -28,11 +30,18 @@
           <text><span weight="medium">Focus block</span></text>
           <text size="sm" foreground="text_muted">Default work interval</text>
         </column>
-        <toggle-group label="Default focus block length" gap="2">
-          <toggle-button size="sm" selected="{settingsFocusMinutes == 25}" autofocus="{settingsFocusMinutes == 25}" disabled="{saving or hasWriteError}" on-toggle="set_duration_25">25 min</toggle-button>
-          <toggle-button size="sm" selected="{settingsFocusMinutes == 50}" autofocus="{settingsFocusMinutes == 50}" disabled="{saving or hasWriteError}" on-toggle="set_duration_50">50 min</toggle-button>
-          <toggle-button size="sm" selected="{settingsFocusMinutes == 90}" autofocus="{settingsFocusMinutes == 90}" disabled="{saving or hasWriteError}" on-toggle="set_duration_90">90 min</toggle-button>
-        </toggle-group>
+        <row gap="8" cross="center">
+          <toggle-group label="Default focus block length" gap="2">
+            <toggle-button size="sm" selected="{settingsFocusMinutes == 25}" autofocus="{settingsFocusMinutes == 25}" disabled="{saving or hasWriteError}" on-toggle="set_duration_25">25</toggle-button>
+            <toggle-button size="sm" selected="{settingsFocusMinutes == 50}" autofocus="{settingsFocusMinutes == 50}" disabled="{saving or hasWriteError}" on-toggle="set_duration_50">50</toggle-button>
+            <toggle-button size="sm" selected="{settingsFocusMinutes == 90}" autofocus="{settingsFocusMinutes == 90}" disabled="{saving or hasWriteError}" on-toggle="set_duration_90">90</toggle-button>
+          </toggle-group>
+          <row width="132" gap="4" cross="center" main="end">
+            <button size="icon" variant="outline" icon="chevron-down" label="Shorten the default focus block by 5 minutes" disabled="{saving or hasWriteError}" on-press="default_focus_down"></button>
+            <text width="60" text-alignment="center" label="{settingsFocusMinutes ++ ' minute default focus block, 5 to 180 minutes'}"><span mono="true" weight="medium">{settingsFocusMinutes} min</span></text>
+            <button size="icon" variant="outline" icon="chevron-up" label="Lengthen the default focus block by 5 minutes" disabled="{saving or hasWriteError}" on-press="default_focus_up"></button>
+          </row>
+        </row>
       </row>
 
       <separator />
@@ -42,11 +51,18 @@
           <text><span weight="medium">Short break</span></text>
           <text size="sm" foreground="text_muted">After each focus block</text>
         </column>
-        <toggle-group label="Short break length" gap="2">
-          <toggle-button size="sm" selected="{shortBreakMinutes == 5}" disabled="{saving or hasWriteError}" on-toggle="set_short_break_5">5 min</toggle-button>
-          <toggle-button size="sm" selected="{shortBreakMinutes == 10}" disabled="{saving or hasWriteError}" on-toggle="set_short_break_10">10 min</toggle-button>
-          <toggle-button size="sm" selected="{shortBreakMinutes == 15}" disabled="{saving or hasWriteError}" on-toggle="set_short_break_15">15 min</toggle-button>
-        </toggle-group>
+        <row gap="8" cross="center">
+          <toggle-group label="Short break length" gap="2">
+            <toggle-button size="sm" selected="{shortBreakMinutes == 5}" disabled="{saving or hasWriteError}" on-toggle="set_short_break_5">5</toggle-button>
+            <toggle-button size="sm" selected="{shortBreakMinutes == 10}" disabled="{saving or hasWriteError}" on-toggle="set_short_break_10">10</toggle-button>
+            <toggle-button size="sm" selected="{shortBreakMinutes == 15}" disabled="{saving or hasWriteError}" on-toggle="set_short_break_15">15</toggle-button>
+          </toggle-group>
+          <row width="132" gap="4" cross="center" main="end">
+            <button size="icon" variant="outline" icon="chevron-down" label="Shorten the short break by one minute" disabled="{saving or hasWriteError}" on-press="short_break_down"></button>
+            <text width="60" text-alignment="center" label="{shortBreakMinutes ++ ' minute short break, 1 to 30 minutes'}"><span mono="true" weight="medium">{shortBreakMinutes} min</span></text>
+            <button size="icon" variant="outline" icon="chevron-up" label="Lengthen the short break by one minute" disabled="{saving or hasWriteError}" on-press="short_break_up"></button>
+          </row>
+        </row>
       </row>
 
       <separator />
@@ -56,16 +72,23 @@
           <text><span weight="medium">Long break</span></text>
           <text size="sm" foreground="text_muted">After every fourth block</text>
         </column>
-        <toggle-group label="Long break length" gap="2">
-          <toggle-button size="sm" selected="{longBreakMinutes == 15}" disabled="{saving or hasWriteError}" on-toggle="set_long_break_15">15 min</toggle-button>
-          <toggle-button size="sm" selected="{longBreakMinutes == 20}" disabled="{saving or hasWriteError}" on-toggle="set_long_break_20">20 min</toggle-button>
-          <toggle-button size="sm" selected="{longBreakMinutes == 30}" disabled="{saving or hasWriteError}" on-toggle="set_long_break_30">30 min</toggle-button>
-        </toggle-group>
+        <row gap="8" cross="center">
+          <toggle-group label="Long break length" gap="2">
+            <toggle-button size="sm" selected="{longBreakMinutes == 15}" disabled="{saving or hasWriteError}" on-toggle="set_long_break_15">15</toggle-button>
+            <toggle-button size="sm" selected="{longBreakMinutes == 20}" disabled="{saving or hasWriteError}" on-toggle="set_long_break_20">20</toggle-button>
+            <toggle-button size="sm" selected="{longBreakMinutes == 30}" disabled="{saving or hasWriteError}" on-toggle="set_long_break_30">30</toggle-button>
+          </toggle-group>
+          <row width="132" gap="4" cross="center" main="end">
+            <button size="icon" variant="outline" icon="chevron-down" label="Shorten the long break by 5 minutes" disabled="{saving or hasWriteError}" on-press="long_break_down"></button>
+            <text width="60" text-alignment="center" label="{longBreakMinutes ++ ' minute long break, 5 to 60 minutes'}"><span mono="true" weight="medium">{longBreakMinutes} min</span></text>
+            <button size="icon" variant="outline" icon="chevron-up" label="Lengthen the long break by 5 minutes" disabled="{saving or hasWriteError}" on-press="long_break_up"></button>
+          </row>
+        </row>
       </row>
     </column>
 
     <column
-      width="220"
+      width="248"
       background="surface_subtle"
       radius="lg"
       padding="16"
@@ -89,6 +112,11 @@
           <toggle-button size="sm" selected="{dailyGoalMinutes == 120}" disabled="{saving or hasWriteError}" on-toggle="set_daily_goal_120">2 h</toggle-button>
           <toggle-button size="sm" selected="{dailyGoalMinutes == 180}" disabled="{saving or hasWriteError}" on-toggle="set_daily_goal_180">3 h</toggle-button>
         </toggle-group>
+        <row gap="4" cross="center">
+          <button size="icon" variant="outline" icon="chevron-down" label="Lower the daily focus goal by 15 minutes" disabled="{saving or hasWriteError}" on-press="daily_goal_down"></button>
+          <text grow="1" text-alignment="center" label="{dailyGoalMinutes ++ ' minute daily focus goal, 15 to 600 minutes'}"><span mono="true" weight="medium">{dailyGoalMinutes} min</span></text>
+          <button size="icon" variant="outline" icon="chevron-up" label="Raise the daily focus goal by 15 minutes" disabled="{saving or hasWriteError}" on-press="daily_goal_up"></button>
+        </row>
       </column>
 
       <separator />
