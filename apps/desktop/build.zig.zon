@@ -1,7 +1,7 @@
 .{
     .name = .focus_tracker,
     .fingerprint = 0x56d5e5365a707070,
-    .version = "0.1.4",
+    .version = "0.1.5",
     .minimum_zig_version = "0.16.0",
     // Source and authoring toolchain are independently content pinned: Zig
     // verifies this SDK archive hash; pnpm install verifies the workspace
