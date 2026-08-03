@@ -401,18 +401,20 @@ const HostContext = struct {
     fn request(context: *anyopaque, name: []const u8, key: u64, payload: []const u8) void {
         const self: *HostContext = @ptrCast(@alignCast(context));
         self.clearPending();
-        if (self.shortcut_preflight_fn) |preflight| {
-            const preflight_context = self.shortcut_preflight_context orelse {
-                self.setPendingError(key, "shortcut_unavailable");
-                return;
-            };
-            preflight(preflight_context, name, payload) catch {
-                // Carbon rejected the candidate before SQLite saw the write.
-                // Deliver the rejection through the existing request result
-                // so the core unwinds the pending settings intent normally.
-                self.setPendingError(key, "shortcut_unavailable");
-                return;
-            };
+        if (std.mem.eql(u8, name, sqlite.settings_set_command)) {
+            if (self.shortcut_preflight_fn) |preflight| {
+                const preflight_context = self.shortcut_preflight_context orelse {
+                    self.setPendingError(key, "shortcut_unavailable");
+                    return;
+                };
+                preflight(preflight_context, name, payload) catch {
+                    // Carbon rejected the candidate before SQLite saw the write.
+                    // Deliver the rejection through the existing request result
+                    // so the core unwinds the pending settings intent normally.
+                    self.setPendingError(key, "shortcut_unavailable");
+                    return;
+                };
+            }
         }
         const response = self.database.handleRequest(name, payload) catch |err| {
             self.setPendingError(key, self.database.errorBytes(err));
@@ -657,9 +659,23 @@ const ExtensionApp = struct {
         const self: *ExtensionApp = @ptrCast(@alignCast(context));
         const model = Adapter.Host.model();
         const candidate = shortcutWriteCandidate(model, name) orelse return;
-        if (self.hotkey_install_failed) return error.HotKeyHandlerUnavailable;
+        try self.preflightShortcutCandidate(candidate);
+    }
+
+    fn preflightShortcutCandidate(
+        self: *ExtensionApp,
+        candidate: global_hotkey.Config,
+    ) anyerror!void {
+        // Disabling does not need a Carbon handler. Keep that escape hatch
+        // available when handler installation failed so users can persist an
+        // explicit off state instead of being trapped in "unavailable".
+        if (self.hotkey_install_failed and candidate.enabled) return error.HotKeyHandlerUnavailable;
         if (self.hotkey.stagedMatches(candidate)) return;
         try self.hotkey.stage(candidate);
+    }
+
+    fn reportForMissingHandler(config: global_hotkey.Config) ShortcutReport {
+        return if (config.enabled) .unavailable else .disabled;
     }
 
     fn syncGlobalHotKey(self: *ExtensionApp, runtime: *native_sdk.Runtime) anyerror!void {
@@ -689,7 +705,7 @@ const ExtensionApp = struct {
         }
 
         if (self.hotkey_install_failed) {
-            try self.reportShortcut(runtime, .unavailable, committed);
+            try self.reportShortcut(runtime, reportForMissingHandler(committed), committed);
             return;
         }
         if (!self.hotkey.activeMatches(committed)) {
@@ -2440,6 +2456,26 @@ test "shortcut preferences preserve the committed combo when native preflight re
     try std.testing.expectEqual(core.QuickShortcutKey.f, core.quickShortcutKey(rejected.model));
     try std.testing.expect(rejected.model.quickShortcutActive);
     try std.testing.expect(core.quickShortcutHasError(rejected.model));
+    try std.testing.expectEqualStrings(
+        "That combination is unavailable. Your saved shortcut was not changed.",
+        core.quickShortcutStatusText(rejected.model),
+    );
+
+    const disabled = core.rt.frameCreate(core.Model, active.model.*);
+    const disabled_settings = core.rt.frameCreate(core.DbSettings, active.model.settings.*);
+    disabled_settings.quickShortcutEnabled = false;
+    disabled.settings = disabled_settings;
+    disabled.quickShortcutActive = false;
+    const enabling = core.update(disabled, .toggle_quick_shortcut);
+    try std.testing.expect(enabling.model.pendingSettings.quickShortcutEnabled);
+    const enabling_requested = core.update(enabling.model, .{ .intent_now = 1_500 });
+    const enabling_rejected = core.update(enabling_requested.model, .{ .db_err = "shortcut_unavailable" });
+    try std.testing.expect(!core.quickShortcutEnabled(enabling_rejected.model));
+    try std.testing.expect(core.quickShortcutHasError(enabling_rejected.model));
+    try std.testing.expectEqualStrings(
+        "That combination is unavailable. Your saved shortcut was not changed.",
+        core.quickShortcutStatusText(enabling_rejected.model),
+    );
 
     const switch_key_before = core.quickShortcutSwitchKey(active.model);
     const disabling = core.update(active.model, .toggle_quick_shortcut);
@@ -2450,6 +2486,38 @@ test "shortcut preferences preserve the committed combo when native preflight re
     const disabling_rejected = core.update(disabling_requested.model, .{ .db_err = "shortcut_unavailable" });
     try std.testing.expect(core.quickShortcutEnabled(disabling_rejected.model));
     try std.testing.expect(core.quickShortcutSwitchKey(disabling_rejected.model) != switch_key_before);
+}
+
+test "missing Carbon handler still permits and reports an explicit disabled shortcut" {
+    var extended: ExtensionApp = undefined;
+    extended.hotkey = .{};
+    extended.hotkey_install_failed = true;
+
+    const disabled: global_hotkey.Config = .{
+        .enabled = false,
+        .key = .f,
+        .modifiers = .command_shift,
+    };
+    try extended.preflightShortcutCandidate(disabled);
+    try std.testing.expect(extended.hotkey.stagedMatches(disabled));
+    try std.testing.expectEqual(
+        ExtensionApp.ShortcutReport.disabled,
+        ExtensionApp.reportForMissingHandler(disabled),
+    );
+
+    const enabled: global_hotkey.Config = .{
+        .enabled = true,
+        .key = .f,
+        .modifiers = .command_shift,
+    };
+    try std.testing.expectError(
+        error.HotKeyHandlerUnavailable,
+        extended.preflightShortcutCandidate(enabled),
+    );
+    try std.testing.expectEqual(
+        ExtensionApp.ShortcutReport.unavailable,
+        ExtensionApp.reportForMissingHandler(enabled),
+    );
 }
 
 test "shortcut preflight classification ignores ordinary settings and blocks SQLite on rejection" {
@@ -2502,6 +2570,15 @@ test "shortcut preflight classification ignores ordinary settings and blocks SQL
         .shortcut_preflight_fn = RejectingPreflight.run,
     };
     defer host.deinit();
+
+    var load_payload: [16]u8 = undefined;
+    @memcpy(load_payload[0..4], "FCL1");
+    putTestLe(&load_payload, 4, 1, 4);
+    putTestLe(&load_payload, 8, 900, 8);
+    HostContext.request(&host, sqlite.load_command, 76, &load_payload);
+    try std.testing.expectEqual(@as(usize, 0), rejector.calls);
+    try std.testing.expect(host.pending_active);
+    try std.testing.expect(host.pending_ok);
 
     HostContext.request(
         &host,

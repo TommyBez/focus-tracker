@@ -268,7 +268,6 @@ export type Msg =
   | { readonly kind: "shortcut_active" }
   | { readonly kind: "shortcut_disabled" }
   | { readonly kind: "shortcut_unavailable" }
-  | { readonly kind: "shortcut_change_rejected" }
   | { readonly kind: "retry_save" }
   | { readonly kind: "discard_failed_change" }
   | { readonly kind: "retry_boot" }
@@ -375,7 +374,6 @@ export const viewUnbound = [
   "shortcut_active",
   "shortcut_disabled",
   "shortcut_unavailable",
-  "shortcut_change_rejected",
   "open_quick",
   "raise_quick",
   "close_quick",
@@ -1244,8 +1242,8 @@ export function quickShortcutLabel(model: Model): Bytes {
 }
 
 export function quickShortcutStatusText(model: Model): Bytes {
-  if (!model.settings.quickShortcutEnabled) return asciiBytes("Disabled");
   if (model.quickShortcutError) return model.quickShortcutErrorText;
+  if (!model.settings.quickShortcutEnabled) return asciiBytes("Disabled");
   if (model.quickShortcutActive) return asciiBytes("Active system-wide while Focus Tracker is running.");
   return asciiBytes("Checking system availability...");
 }
@@ -1574,7 +1572,6 @@ export function commandMsg(name: string): Msg | null {
   if (name === "app.shortcut-active") return { kind: "shortcut_active" };
   if (name === "app.shortcut-disabled") return { kind: "shortcut_disabled" };
   if (name === "app.shortcut-unavailable") return { kind: "shortcut_unavailable" };
-  if (name === "app.shortcut-change-rejected") return { kind: "shortcut_change_rejected" };
   if (name === "app.quick-toggle") return { kind: "quick_toggle_command" };
   if (name === "app.quick-end") return { kind: "open_quick_end" };
   if (name === "app.retry") return { kind: "retry_save" };
@@ -2363,12 +2360,6 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
         quickShortcutActive: false,
         quickShortcutError: true,
         quickShortcutErrorText: asciiBytes("macOS could not register this shortcut. It may already be in use."),
-      };
-    case "shortcut_change_rejected":
-      return {
-        ...withoutFailedWrite(model),
-        quickShortcutError: true,
-        quickShortcutErrorText: asciiBytes("That combination is unavailable. Your saved shortcut was not changed."),
       };
     case "retry_boot":
       return [

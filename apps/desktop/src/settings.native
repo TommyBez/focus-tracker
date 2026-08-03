@@ -164,12 +164,12 @@
     <row gap="20" cross="start">
       <column grow="1" gap="6">
         <text size="sm" foreground="text_muted">Modifiers</text>
-        <toggle-group label="Global shortcut modifiers, Command combinations" gap="2">
+        <toggle-group label="Global shortcut modifiers, first row" gap="2">
           <toggle-button size="sm" selected="{quickShortcutModifiers == 'command_shift'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_modifiers_command_shift">Cmd + Shift</toggle-button>
           <toggle-button size="sm" selected="{quickShortcutModifiers == 'command_option'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_modifiers_command_option">Cmd + Option</toggle-button>
           <toggle-button size="sm" selected="{quickShortcutModifiers == 'command_control'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_modifiers_command_control">Cmd + Ctrl</toggle-button>
         </toggle-group>
-        <toggle-group label="Global shortcut modifiers, Control combinations" gap="2">
+        <toggle-group label="Global shortcut modifiers, second row" gap="2">
           <toggle-button size="sm" selected="{quickShortcutModifiers == 'control_shift'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_modifiers_control_shift">Ctrl + Shift</toggle-button>
           <toggle-button size="sm" selected="{quickShortcutModifiers == 'control_option'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_modifiers_control_option">Ctrl + Option</toggle-button>
           <toggle-button size="sm" selected="{quickShortcutModifiers == 'command_control_shift'}" disabled="{saving or hasWriteError or not quickShortcutEnabled}" on-toggle="set_quick_shortcut_modifiers_command_control_shift">Cmd + Ctrl + Shift</toggle-button>

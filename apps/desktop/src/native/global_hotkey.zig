@@ -249,12 +249,18 @@ pub const Manager = struct {
 
     fn release(self: *Manager, reference: EventHotKeyRef) void {
         const hot_key = reference orelse return;
-        if (UnregisterEventHotKey(hot_key) == no_err) return;
+        const status = UnregisterEventHotKey(hot_key);
+        if (status == no_err) return;
         // Keep a failed unregister reachable so stop can retry it. The active
         // ID has already moved, therefore an old event can never dispatch.
         if (self.retired_count < self.retired_refs.len) {
             self.retired_refs[self.retired_count] = hot_key;
             self.retired_count += 1;
+        } else {
+            std.log.err(
+                "global shortcut unregister failed with status {d}; retry queue is full",
+                .{status},
+            );
         }
     }
 
