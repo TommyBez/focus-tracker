@@ -112,7 +112,7 @@
             resize-easing="spring"
           >
             <!-- Task rail. It contracts when a block starts, but stays useful. -->
-            <column min-width="304" background="surface_subtle" padding="16" gap="14">
+            <column min-width="304" background="surface_subtle" padding="16" gap="16">
               <row gap="12" cross="center">
                 <text grow="1"><span weight="bold">Today</span></text>
                 <text size="sm" foreground="text_muted">{filterCountText}</text>
@@ -122,8 +122,7 @@
                 <row gap="8" cross="center">
                   <text-field
                     key="{composerKey}"
-                    size="sm"
-                    width="228"
+                    grow="1"
                     text="{taskDraft}"
                     placeholder="Add the next concrete action"
                     label="New task"
@@ -145,7 +144,7 @@
                 </row>
 
                 <row>
-                  <tabs label="Task filter" gap="0">
+                  <tabs label="Task filter" gap="2">
                     <button size="sm" selected="{taskFilter == 'open'}" autofocus="{focusRecoveryKind == 'task_filter' and taskFilter == 'open'}" on-press="show_open_tasks">Open</button>
                     <button size="sm" selected="{taskFilter == 'completed'}" autofocus="{focusRecoveryKind == 'task_filter' and taskFilter == 'completed'}" on-press="show_completed_tasks">Completed</button>
                     <button size="sm" selected="{taskFilter == 'archived'}" autofocus="{focusRecoveryKind == 'task_filter' and taskFilter == 'archived'}" on-press="show_archived_tasks">Archived</button>
@@ -156,7 +155,7 @@
               <else>
                 <if test="{sessionState == 'complete'}">
                   <row background="surface" radius="lg" padding="12" cross="center" label="Focus block recorded">
-                    <column gap="2" grow="1">
+                    <column gap="4" grow="1">
                       <text><span weight="medium">Focus recorded</span></text>
                       <text size="sm" wrap="true" foreground="text_muted">Task remains open.</text>
                     </column>
@@ -164,7 +163,7 @@
                 </if>
                 <else>
                   <row background="surface" radius="lg" padding="12" cross="center">
-                    <column gap="2" grow="1">
+                    <column gap="4" grow="1">
                       <if test="{sessionState == 'paused'}">
                         <if test="{isBreak}">
                           <text><span weight="medium">Break paused</span></text>
@@ -189,7 +188,7 @@
               </else>
 
               <scroll grow="1" overscroll="rubber_band">
-                <list gap="5" label="{taskListLabel}">
+                <list gap="4" label="{taskListLabel}">
                   <for each="visibleTasks" key="id" as="t">
                     <list-item
                       global-key="{t.id}"
@@ -198,6 +197,12 @@
                       on-press="select_task:{t.id}"
                       label="{t.title}"
                     >
+                      <!--
+                        Leading gutter. Trailing controls are icon buttons and
+                        badges that carry their own optical inset, so the row
+                        needs this to sit symmetrically inside the selection wash.
+                      -->
+                      <spacer width="8" />
                       <if test="{t.archived}">
                         <icon name="archive" foreground="text_muted" />
                       </if>
@@ -209,7 +214,7 @@
                           on-toggle="toggle_task:{t.id}"
                         />
                       </else>
-                      <spacer width="10" />
+                      <spacer width="8" />
 
                       <if test="{t.id == editTaskId}">
                         <text-field
@@ -246,28 +251,24 @@
                         <else>
                           <text grow="1" overflow="ellipsis">{t.title}</text>
                         </else>
-                        <if test="{t.archived}">
-                          <if test="{t.id == actionTaskId and sessionState == 'idle'}">
-                            <button
-                              variant="ghost"
-                              icon="refresh-cw"
-                              disabled="{saving or hasWriteError}"
-                              label="{t.restoreLabel}"
-                              on-press="restore_task:{t.id}"
-                            >Restore</button>
-                            <button
-                              size="icon"
-                              variant="ghost"
-                              icon="trash"
-                              autofocus="{t.purgeAutofocus}"
-                              disabled="{saving or hasWriteError}"
-                              label="{t.purgeLabel}"
-                              on-press="request_purge_task:{t.id}"
-                            ></button>
-                          </if>
-                          <else>
-                            <badge variant="secondary">Archived</badge>
-                          </else>
+                        <!-- The leading archive icon already states the state. -->
+                        <if test="{t.archived and t.id == actionTaskId and sessionState == 'idle'}">
+                          <button
+                            variant="ghost"
+                            icon="refresh-cw"
+                            disabled="{saving or hasWriteError}"
+                            label="{t.restoreLabel}"
+                            on-press="restore_task:{t.id}"
+                          >Restore</button>
+                          <button
+                            size="icon"
+                            variant="ghost"
+                            icon="trash"
+                            autofocus="{t.purgeAutofocus}"
+                            disabled="{saving or hasWriteError}"
+                            label="{t.purgeLabel}"
+                            on-press="request_purge_task:{t.id}"
+                          ></button>
                         </if>
 
                         <if test="{not t.archived and t.id == actionTaskId and sessionState == 'idle'}">
@@ -326,7 +327,7 @@
                   </for>
 
                   <else>
-                    <column padding="28" gap="10" main="center" cross="center">
+                    <column padding="24" gap="8" main="center" cross="center">
                       <if test="{taskFilter == 'open'}">
                         <text text-alignment="center"><span weight="bold">No open tasks</span></text>
                         <text width="230" wrap="true" text-alignment="center" foreground="text_muted">Add a task to prepare your next focus block.</text>
@@ -345,7 +346,7 @@
               </scroll>
 
               <if test="{hasUndo}">
-                <row background="surface" radius="lg" padding="10" gap="8" cross="center">
+                <row background="surface" radius="lg" padding="12" gap="8" cross="center">
                   <text grow="1" overflow="ellipsis">{undoText}</text>
                   <button size="sm" variant="ghost" disabled="{saving or hasWriteError}" on-press="undo_delete">Undo</button>
                   <button icon="x" size="icon" variant="ghost" label="Dismiss undo" on-press="dismiss_undo"></button>
@@ -355,8 +356,8 @@
 
             <!-- Timer workspace. -->
             <column min-width="540" grow="1" background="background">
-              <column padding="18" gap="10">
-                <row gap="12" cross="center">
+              <column padding="16" gap="8">
+                <row gap="12" cross="start">
                   <column grow="1">
                     <if test="{isBreak}">
                       <text><span weight="bold">Break timer</span></text>
@@ -365,38 +366,35 @@
                       <text><span weight="bold">Focus timer</span></text>
                     </else>
                   </column>
-                  <column width="210" gap="6">
+                  <column width="210" gap="4">
                     <row gap="8" cross="center">
                       <text size="sm" grow="1" foreground="text_muted">Daily focus</text>
                       <text size="sm" text-alignment="end" foreground="text_muted">{todayGoalText}</text>
                     </row>
                     <progress height="4" value="{todayGoalProgress}" label="Daily focus goal progress" />
                   </column>
-                  <spacer width="12" />
                 </row>
               </column>
 
               <separator />
 
-              <column grow="1" padding="24">
+              <column grow="1" padding="16">
                 <if test="{sessionState == 'idle'}">
                   <!-- The idle instrument sits deliberately above center. -->
                   <column grow="1">
                     <if test="{breakAcknowledgementOpen}">
-                      <row main="center">
-                        <row width="640" background="surface_subtle" radius="lg" padding="12" gap="10" cross="center" label="Break recorded">
-                          <column gap="2" grow="1">
-                            <text><span weight="medium">Break recorded</span></text>
-                            <text size="sm" foreground="text_muted">{breakCompletionSummary} Your task is still open.</text>
-                          </column>
-                          <button
-                            size="icon"
-                            variant="ghost"
-                            icon="x"
-                            label="Dismiss break record"
-                            on-press="dismiss_break_acknowledgement"
-                          ></button>
-                        </row>
+                      <row background="surface_subtle" radius="lg" padding="12" gap="12" cross="center" label="Break recorded">
+                        <column gap="4" grow="1">
+                          <text><span weight="medium">Break recorded</span></text>
+                          <text size="sm" foreground="text_muted">{breakCompletionSummary} Your task is still open.</text>
+                        </column>
+                        <button
+                          size="icon"
+                          variant="ghost"
+                          icon="x"
+                          label="Dismiss break record"
+                          on-press="dismiss_break_acknowledgement"
+                        ></button>
                       </row>
                       <spacer height="24" />
                     </if>
@@ -404,60 +402,54 @@
                       <spacer height="64" />
                     </else>
 
-                    <row main="center">
-                      <if test="{selectedTaskExists}">
-                        <column width="640" gap="18" label="Selected focus block">
-                          <row gap="32" cross="end">
-                            <column grow="1" gap="8">
-                              <text size="heading" overflow="ellipsis">{focusTaskTitle}</text>
-                              <text wrap="true" foreground="text_muted">Choose a duration, then start the timer.</text>
-                            </column>
+                    <if test="{selectedTaskExists}">
+                      <column gap="16" label="Selected focus block">
+                        <row gap="32" cross="end">
+                          <column grow="1" gap="8">
+                            <text size="heading" overflow="ellipsis">{focusTaskTitle}</text>
+                            <text wrap="true" foreground="text_muted">Choose a duration, then start the timer.</text>
+                          </column>
 
-                            <column width="184" gap="3" cross="end">
-                              <text size="sm" foreground="text_muted">Duration</text>
-                              <text width="184" size="heading" overflow="clip" text-alignment="end" label="{selectedFocusIntervalLabel}">{pad(focusLengthMinutes, 2)}:00</text>
-                            </column>
+                          <column width="184" gap="4" cross="end">
+                            <text size="sm" foreground="text_muted">Duration</text>
+                            <text width="184" size="heading" overflow="clip" text-alignment="end" label="{selectedFocusIntervalLabel}">{pad(focusLengthMinutes, 2)}:00</text>
+                          </column>
+                        </row>
+
+                        <separator />
+
+                        <row gap="8" cross="center">
+                          <toggle-group label="Focus length" gap="2">
+                            <toggle-button size="sm" selected="{focusLengthMinutes == 25}" disabled="{saving or hasWriteError}" on-toggle="set_duration_25">25 min</toggle-button>
+                            <toggle-button size="sm" selected="{focusLengthMinutes == 50}" disabled="{saving or hasWriteError}" on-toggle="set_duration_50">50 min</toggle-button>
+                            <toggle-button size="sm" selected="{focusLengthMinutes == 90}" disabled="{saving or hasWriteError}" on-toggle="set_duration_90">90 min</toggle-button>
+                          </toggle-group>
+                          <button
+                            key="{mainStartFocusKey}"
+                            variant="primary"
+                            icon="play"
+                            autofocus="{startAutofocus and not purgeDialogOpen}"
+                            disabled="{saving or hasWriteError}"
+                            on-press="start_focus"
+                          >Start {focusLengthMinutes} min</button>
+                        </row>
+                      </column>
+                    </if>
+
+                    <else>
+                      <column gap="8" label="Choose a focus task">
+                        <text size="heading"><span weight="bold">Choose a task to focus on</span></text>
+                        <if test="{taskFilter == 'open'}">
+                          <text wrap="true" foreground="text_muted">Select an open task in the ledger to prepare the timer.</text>
+                        </if>
+                        <else>
+                          <text wrap="true" foreground="text_muted">Return to open tasks to choose your next block.</text>
+                          <row>
+                            <button variant="outline" on-press="show_open_tasks">Show open tasks</button>
                           </row>
-
-                          <separator />
-
-                          <column gap="8">
-                            <row gap="10" cross="center">
-                              <toggle-group label="Focus length" gap="0">
-                                <toggle-button size="sm" selected="{focusLengthMinutes == 25}" disabled="{saving or hasWriteError}" on-toggle="set_duration_25">25 min</toggle-button>
-                                <toggle-button size="sm" selected="{focusLengthMinutes == 50}" disabled="{saving or hasWriteError}" on-toggle="set_duration_50">50 min</toggle-button>
-                                <toggle-button size="sm" selected="{focusLengthMinutes == 90}" disabled="{saving or hasWriteError}" on-toggle="set_duration_90">90 min</toggle-button>
-                              </toggle-group>
-                              <button
-                                key="{mainStartFocusKey}"
-                                variant="primary"
-                                icon="play"
-                                autofocus="{startAutofocus and not purgeDialogOpen}"
-                                disabled="{saving or hasWriteError}"
-                                on-press="start_focus"
-                              >Start {focusLengthMinutes} min</button>
-                            </row>
-                          </column>
-                        </column>
-                      </if>
-
-                      <else>
-                        <column width="640" gap="12" label="Choose a focus task">
-                          <column gap="10">
-                            <text size="heading"><span weight="bold">Choose a task to focus on</span></text>
-                            <if test="{taskFilter == 'open'}">
-                              <text wrap="true" foreground="text_muted">Select an open task in the ledger to prepare the timer.</text>
-                            </if>
-                            <else>
-                              <text wrap="true" foreground="text_muted">Return to open tasks to choose your next block.</text>
-                              <row>
-                                <button variant="outline" on-press="show_open_tasks">Show open tasks</button>
-                              </row>
-                            </else>
-                          </column>
-                        </column>
-                      </else>
-                    </row>
+                        </else>
+                      </column>
+                    </else>
 
                     <spacer grow="1" />
                   </column>
@@ -465,10 +457,10 @@
 
                 <else>
                   <row grow="1" main="center" cross="center">
-                    <column width="480" height="342">
+                    <column width="480">
 
                   <if test="{sessionState == 'running'}">
-                    <column background="surface_subtle" radius="lg" padding="24" gap="14" main="center" cross="center">
+                    <column background="surface_subtle" radius="lg" padding="24" gap="16" main="center" cross="center">
                       <if test="{isBreak}">
                         <text size="sm" foreground="text_muted"><span weight="medium">Break in progress</span></text>
                       </if>
@@ -479,7 +471,7 @@
                       <text size="display" text-alignment="center" label="{timerA11y}">
                         <span mono="true" weight="medium" scale="1.7">{pad(remainingMinutes, 2)}:{pad(remainingSeconds, 2)}</span>
                       </text>
-                      <column width="420" gap="7">
+                      <column width="420" gap="8">
                         <row>
                           <if test="{isBreak}">
                             <text size="sm" grow="1" foreground="text_muted">Break progress</text>
@@ -509,13 +501,13 @@
                   </if>
 
                   <if test="{sessionState == 'paused'}">
-                    <column background="surface" radius="lg" padding="24" gap="14" main="center" cross="center">
+                    <column background="surface" radius="lg" padding="24" gap="16" main="center" cross="center">
                       <text size="sm" foreground="text_muted"><span weight="medium">Paused</span></text>
                       <text width="420" text-alignment="center"><span weight="medium">{focusTaskTitle}</span></text>
                       <text size="display" text-alignment="center" label="{timerA11y}">
                         <span mono="true" weight="medium" scale="1.7">{pad(remainingMinutes, 2)}:{pad(remainingSeconds, 2)}</span>
                       </text>
-                      <column width="420" gap="7">
+                      <column width="420" gap="8">
                         <row>
                           <if test="{isBreak}">
                             <text size="sm" grow="1" foreground="text_muted">Break progress</text>
@@ -545,11 +537,11 @@
                   </if>
 
                   <if test="{sessionState == 'complete'}">
-                    <column height="324" background="surface_subtle" radius="lg" padding="22" gap="8" main="center" cross="center" label="Recorded focus block and optional task choices">
+                    <column background="surface_subtle" radius="lg" padding="24" gap="12" main="center" cross="center" label="Recorded focus block and optional task choices">
                       <text size="heading" text-alignment="center"><span weight="bold">Focus recorded</span></text>
                       <text width="400" wrap="true" text-alignment="center" foreground="text_muted">{completionSummary}</text>
                       <text width="400" wrap="true" text-alignment="center" foreground="text_muted">The task is still open. Marking it complete can be reversed from Completed.</text>
-                      <column width="400" gap="6" label="Task and break choices">
+                      <column width="400" gap="8" label="Task and break choices">
                         <button variant="primary" icon="check" disabled="{saving or hasWriteError}" on-press="complete_task_after_focus">Mark task complete</button>
                         <button key="complete-safe" variant="secondary" autofocus="true" disabled="{saving or hasWriteError}" on-press="keep_task_open_after_focus">Keep task open</button>
                         <button variant="ghost" icon="clock" disabled="{saving or hasWriteError}" on-press="start_break">Keep task open + start {nextBreakMinutes} min break</button>
@@ -569,9 +561,9 @@
           <!-- Ledger is bounded and factual: one summary, one honest chart. -->
           <scroll grow="1" overscroll="rubber_band">
             <row main="center">
-              <column width="880" padding="22" gap="13">
-                <row gap="18" cross="end">
-                  <column gap="6" grow="1">
+              <column width="880" padding="24" gap="16">
+                <row gap="16" cross="end">
+                  <column gap="4" grow="1">
                     <text size="heading"><span weight="bold">Focus ledger</span></text>
                     <text wrap="true" foreground="text_muted">Completed focus blocks and totals.</text>
                   </column>
@@ -598,7 +590,7 @@
                       </else>
                     </else>
                   </column>
-                  <column width="300" gap="9">
+                  <column width="300" gap="8">
                     <row cross="center">
                       <text grow="1"><span weight="medium">Today</span></text>
                       <text foreground="text_muted">{todayGoalText}</text>
@@ -607,9 +599,9 @@
                   </column>
                 </row>
 
-                <column background="surface" radius="lg" padding="16" gap="10">
+                <column background="surface" radius="lg" padding="16" gap="12">
                   <row gap="12" cross="center">
-                    <column gap="3" grow="1">
+                    <column gap="4" grow="1">
                       <text><span weight="medium">Focus by day</span></text>
                       <text size="sm" foreground="text_muted">Minutes of completed focus</text>
                     </column>
@@ -618,12 +610,10 @@
 
                   <if test="{hasFullWeekMinute}">
                     <chart
-                      width="776"
                       height="150"
                       y-min="0"
                       y-max="{weekChartMaxMinutes}"
                       x-labels="{weekDayLabels}"
-                      y-labels="true"
                       grid-lines="3"
                       hover-details="true"
                       label="Focus minutes by day"
@@ -633,7 +623,7 @@
 
                     <row main="space_between">
                       <for each="weekDays" key="id" as="d">
-                        <column width="88" gap="2" cross="center" label="{d.accessibilityLabel}">
+                        <column width="88" gap="4" cross="center" label="{d.accessibilityLabel}">
                           <if test="{d.today}">
                             <badge variant="secondary">Today · {d.valueText}</badge>
                           </if>
@@ -647,13 +637,13 @@
 
                   <else>
                     <if test="{hasWeekFocus}">
-                      <column background="surface_subtle" radius="lg" padding="12" gap="3" label="First focus recorded">
+                      <column background="surface_subtle" radius="lg" padding="12" gap="4" label="First focus recorded">
                         <text><span weight="medium">First focus recorded</span></text>
                         <text size="sm" wrap="true" foreground="text_muted">Your first full minute will appear here.</text>
                       </column>
                     </if>
                     <else>
-                      <column padding="24" gap="10" main="center" cross="center" label="No focus recorded in the last seven days">
+                      <column padding="24" gap="8" main="center" cross="center" label="No focus recorded in the last seven days">
                         <text><span weight="medium">No focus recorded this week</span></text>
                         <text width="360" wrap="true" text-alignment="center" foreground="text_muted">Complete a block to add data to this chart.</text>
                       </column>
@@ -661,9 +651,9 @@
                   </else>
                 </column>
 
-                <column background="surface" radius="lg" padding="20" gap="14">
+                <column background="surface" radius="lg" padding="16" gap="12">
                   <row gap="12" cross="center">
-                    <column gap="3" grow="1">
+                    <column gap="4" grow="1">
                       <text><span weight="medium">Recent blocks</span></text>
                       <text size="sm" foreground="text_muted">Newest first · latest 14</text>
                     </column>
@@ -685,7 +675,7 @@
                   </if>
 
                   <else>
-                    <column padding="32" gap="12" main="center" cross="center">
+                    <column padding="24" gap="12" main="center" cross="center">
                       <icon name="clock" foreground="text_muted" />
                       <text text-alignment="center"><span weight="bold">Your ledger is ready</span></text>
                       <text width="360" wrap="true" text-alignment="center" foreground="text_muted">Complete one block and its time will appear here.</text>
@@ -704,8 +694,8 @@
   <if test="{mainEndDialogOpen and not isBreak}">
     <column main="center" cross="center">
       <dialog text="Finish this focus block?" width="480" padding="24" on-dismiss="cancel_end_focus">
-        <column gap="18">
-          <spacer height="32" />
+        <column gap="16">
+          <spacer height="16" />
           <text wrap="true" foreground="text_muted">Keep the focused time so far, or discard this unfinished block.</text>
           <row gap="8" main="end">
             <button variant="ghost" autofocus="true" on-press="cancel_end_focus">Continue focusing</button>
@@ -720,8 +710,8 @@
   <if test="{mainEndDialogOpen and isBreak}">
     <column main="center" cross="center">
       <dialog text="Finish this break?" width="480" padding="24" on-dismiss="cancel_end_focus">
-        <column gap="18">
-          <spacer height="12" />
+        <column gap="16">
+          <spacer height="16" />
           <text wrap="true" foreground="text_muted">Keep the rest taken so far, or discard this unfinished break.</text>
           <row gap="8" main="end">
             <button variant="ghost" autofocus="true" on-press="cancel_end_focus">Continue break</button>
@@ -737,7 +727,7 @@
     <column grow="1" padding="32" main="center" cross="center">
       <dialog text="Delete this task permanently?" width="500" padding="24" on-dismiss="cancel_purge_task">
         <column gap="16">
-          <spacer height="32" />
+          <spacer height="16" />
           <text><span weight="bold">{purgeTaskTitle}</span></text>
           <text wrap="true">This removes the task from your archive and cannot be undone.</text>
           <text wrap="true" foreground="text_muted">Recorded focus time stays in the Ledger, but the task name and session association are removed.</text>

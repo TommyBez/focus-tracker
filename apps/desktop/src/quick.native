@@ -6,9 +6,9 @@
   It shares the exact model, commands, and SQLite authority with the ledger.
 -->
 <stack role="group" label="Quick Focus">
-  <column background="background" grow="1" padding="14" gap="10" label="Quick Focus controller">
-    <row gap="10" cross="center">
-      <column gap="1" grow="1">
+  <column background="background" grow="1" padding="12" gap="12" label="Quick Focus controller">
+    <row padding="4" gap="12" cross="center">
+      <column gap="4" grow="1">
         <text><span weight="bold">Quick Focus</span></text>
         <text size="sm" foreground="text_muted">{todayGoalText}</text>
       </column>
@@ -27,7 +27,7 @@
     <separator />
 
     <if test="{loadState == 'loading'}">
-      <column grow="1" gap="12" main="center" label="Loading Quick Focus">
+      <column grow="1" padding="4" gap="12" main="center" label="Loading Quick Focus">
         <row gap="8" cross="center">
           <spinner />
           <text foreground="text_muted">Opening your local ledger</text>
@@ -40,7 +40,7 @@
 
     <else>
       <if test="{loadState == 'fatal'}">
-        <column grow="1" gap="12" main="center" label="Quick Focus could not load">
+        <column grow="1" padding="4" gap="12" main="center" label="Quick Focus could not load">
           <text size="heading"><span weight="bold">Couldn’t open the ledger.</span></text>
           <text wrap="true" foreground="text_muted">{fatalErrorText}</text>
           <row gap="8">
@@ -52,12 +52,12 @@
 
       <else>
         <if test="{sessionState == 'idle'}">
-          <column grow="1" gap="10" label="Prepare a focus block">
+          <column grow="1" gap="12" label="Prepare a focus block">
             <scroll grow="1" overscroll="rubber_band">
-              <column gap="8" padding="4">
+              <column padding="4" gap="8">
                 <if test="{breakAcknowledgementOpen}">
-                  <row background="surface_subtle" radius="lg" padding="10" gap="8" cross="center" label="Break recorded">
-                    <column gap="1" grow="1">
+                  <row background="surface_subtle" radius="lg" padding="12" gap="12" cross="center" label="Break recorded">
+                    <column gap="4" grow="1">
                       <text><span weight="medium">Break recorded</span></text>
                       <text size="sm" wrap="true" foreground="text_muted">{breakCompletionSummary} Task stays open.</text>
                     </column>
@@ -72,7 +72,7 @@
                 </if>
 
                 <row gap="8" cross="center" label="Choose or add a task">
-                  <column gap="1" grow="1">
+                  <column gap="4" grow="1">
                     <text><span weight="medium">Choose or add a task</span></text>
                     <text size="sm" foreground="text_muted">{quickTaskCountText}</text>
                   </column>
@@ -103,7 +103,7 @@
                 </row>
 
                 <if test="{quickHasTasks}">
-                  <list gap="2" label="Choose an open task for Quick Focus">
+                  <list gap="4" label="Choose an open task for Quick Focus">
                     <for each="quickTasks" key="id" as="q">
                       <list-item
                         global-key="{q.id}"
@@ -112,7 +112,9 @@
                         label="{q.accessibilityLabel}"
                         on-press="select_quick_task:{q.id}"
                       >
+                        <spacer width="8" />
                         <text grow="1" overflow="ellipsis">{q.title}</text>
+                        <spacer width="8" />
                       </list-item>
                     </for>
                   </list>
@@ -122,7 +124,7 @@
                 </if>
 
                 <else>
-                  <column background="surface_subtle" radius="lg" padding="10" gap="3" label="No open tasks">
+                  <column background="surface_subtle" radius="lg" padding="12" gap="4" label="No open tasks">
                     <text><span weight="medium">Add the next concrete action.</span></text>
                     <text size="sm" wrap="true" foreground="text_muted">It will be selected automatically.</text>
                   </column>
@@ -130,7 +132,7 @@
               </column>
             </scroll>
 
-            <column gap="8" label="Choose duration, then start">
+            <column padding="4" gap="8" label="Choose duration, then start">
               <row gap="8" cross="center">
                 <text grow="1"><span weight="medium">Duration</span></text>
                 <toggle-group label="Focus length in minutes" gap="2">
@@ -146,10 +148,10 @@
 
         <else>
           <scroll grow="1" overscroll="rubber_band">
-            <column gap="10">
+            <column padding="4" gap="12">
               <if test="{sessionState == 'running'}">
-                <column background="surface_subtle" radius="xl" padding="14" gap="10" main="center" cross="center" label="Active focus transport">
-                  <column width="332" gap="1">
+                <column background="surface_subtle" radius="xl" padding="16" gap="12" main="center" label="Active focus transport">
+                  <column gap="4">
                     <if test="{isBreak}">
                       <text size="sm" foreground="text_muted"><span weight="medium">Recovery block</span></text>
                     </if>
@@ -160,12 +162,12 @@
                   </column>
                   <text size="display" text-alignment="center" label="{timerA11y}"><span mono="true" weight="medium" scale="1.35">{pad(remainingMinutes, 2)}:{pad(remainingSeconds, 2)}</span></text>
                   <if test="{isBreak}">
-                    <progress width="332" value="{focusProgress}" label="Break progress" />
+                    <progress value="{focusProgress}" label="Break progress" />
                   </if>
                   <else>
-                    <progress width="332" value="{focusProgress}" label="Focus block progress" />
+                    <progress value="{focusProgress}" label="Focus block progress" />
                   </else>
-                  <row width="332" gap="8" label="Timer transport controls">
+                  <row gap="8" label="Timer transport controls">
                     <button key="running-primary" grow="1" variant="secondary" icon="pause" autofocus="{transportAutofocus and not endDialogOpen}" disabled="{quickControlsDisabled}" on-press="pause_focus">Pause</button>
                     <button grow="1" variant="ghost" disabled="{saving or hasWriteError}" on-press="request_quick_end_focus">Finish…</button>
                   </row>
@@ -173,19 +175,19 @@
               </if>
 
               <if test="{sessionState == 'paused'}">
-                <column background="surface_subtle" radius="xl" padding="14" gap="10" main="center" cross="center" label="Paused focus transport">
-                  <column width="332" gap="1">
+                <column background="surface_subtle" radius="xl" padding="16" gap="12" main="center" label="Paused focus transport">
+                  <column gap="4">
                     <text size="sm" foreground="text_muted"><span weight="medium">Paused</span></text>
                     <text overflow="ellipsis">{quickTaskTitle}</text>
                   </column>
                   <text size="display" text-alignment="center" label="{timerA11y}"><span mono="true" weight="medium" scale="1.35">{pad(remainingMinutes, 2)}:{pad(remainingSeconds, 2)}</span></text>
                   <if test="{isBreak}">
-                    <progress width="332" value="{focusProgress}" label="Paused break progress" />
+                    <progress value="{focusProgress}" label="Paused break progress" />
                   </if>
                   <else>
-                    <progress width="332" value="{focusProgress}" label="Paused focus block progress" />
+                    <progress value="{focusProgress}" label="Paused focus block progress" />
                   </else>
-                  <row width="332" gap="8" label="Paused timer transport controls">
+                  <row gap="8" label="Paused timer transport controls">
                     <button key="paused-primary" grow="1" variant="primary" icon="play" autofocus="{transportAutofocus and not endDialogOpen}" disabled="{quickControlsDisabled}" on-press="resume_focus">Resume</button>
                     <button grow="1" variant="ghost" disabled="{saving or hasWriteError}" on-press="request_quick_end_focus">Finish…</button>
                   </row>
@@ -193,14 +195,14 @@
               </if>
 
               <if test="{sessionState == 'complete' and quickCompletionDialogOpen}">
-                <column background="surface_subtle" radius="xl" padding="14" gap="8" main="center" cross="center" label="Recorded focus block and optional task choices">
-                  <column width="332" gap="1">
+                <column background="surface_subtle" radius="xl" padding="16" gap="12" main="center" label="Recorded focus block and optional task choices">
+                  <column gap="4">
                     <text><span weight="bold">Focus recorded</span></text>
                     <text size="sm" foreground="text_muted">{quickCompletionSummary}</text>
                   </column>
-                  <text width="332" overflow="ellipsis" text-alignment="center">{quickTaskTitle}</text>
-                  <text width="332" wrap="true" text-alignment="center" size="sm" foreground="text_muted">The task is still open. You can reverse a completed task later.</text>
-                  <column width="332" gap="6">
+                  <text overflow="ellipsis" text-alignment="center">{quickTaskTitle}</text>
+                  <text wrap="true" text-alignment="center" size="sm" foreground="text_muted">The task is still open. You can reverse a completed task later.</text>
+                  <column gap="8">
                     <button variant="primary" icon="check" disabled="{saving or hasWriteError}" on-press="complete_task_after_focus">Mark task complete</button>
                     <button key="complete-safe" variant="secondary" autofocus="true" disabled="{saving or hasWriteError}" on-press="keep_task_open_after_focus">Keep task open</button>
                     <button variant="ghost" icon="clock" disabled="{saving or hasWriteError}" on-press="start_break">Keep task open + start {nextBreakMinutes} min break</button>
@@ -209,7 +211,7 @@
               </if>
 
               <if test="{sessionState == 'complete' and not quickCompletionDialogOpen}">
-                <column background="surface_subtle" radius="xl" padding="14" gap="10" main="center" cross="center" label="Completed focus block">
+                <column background="surface_subtle" radius="xl" padding="16" gap="12" main="center" cross="center" label="Completed focus block">
                   <text size="heading"><span weight="bold">Focus recorded.</span></text>
                   <text wrap="true" text-alignment="center" foreground="text_muted">The task is still open in Focus Tracker.</text>
                   <button variant="primary" on-press="open_full_app">Update task</button>
@@ -222,13 +224,13 @@
         <if test="{saving or hasWriteError}">
           <separator />
           <if test="{saving}">
-            <row height="32" gap="8" cross="center" label="Saving changes">
+            <row height="32" padding="4" gap="8" cross="center" label="Saving changes">
               <spinner />
               <text size="sm" foreground="text_muted">Saving</text>
             </row>
           </if>
           <else>
-            <row height="32" gap="8" cross="center" label="Changes were not saved">
+            <row height="32" padding="4" gap="8" cross="center" label="Changes were not saved">
               <text size="sm" foreground="destructive"><span weight="medium">Unable to save</span></text>
               <text grow="1" size="sm" foreground="text_muted" overflow="ellipsis">{writeErrorText}</text>
               <button size="sm" variant="ghost" on-press="discard_failed_change">Discard</button>
@@ -242,14 +244,13 @@
 
   <if test="{quickEndDialogOpen and not isBreak}">
     <column main="center" cross="center">
-      <dialog text="Finish this focus block?" width="352" padding="18" on-dismiss="cancel_end_focus">
-        <column gap="10">
-          <spacer height="28" />
+      <dialog text="Finish this focus block?" width="352" padding="24" on-dismiss="cancel_end_focus">
+        <column gap="12">
+          <spacer height="16" />
           <text wrap="true" foreground="text_muted">Keep the focused time so far, or discard this unfinished block.</text>
           <button variant="ghost" autofocus="true" on-press="cancel_end_focus">Continue focusing</button>
           <button variant="destructive" disabled="{saving or hasWriteError}" on-press="confirm_end_focus">Discard block</button>
           <button variant="primary" icon="check" disabled="{saving or hasWriteError}" on-press="finish_focus_now">Record elapsed time</button>
-          <spacer height="8" />
         </column>
       </dialog>
     </column>
@@ -257,14 +258,13 @@
 
   <if test="{quickEndDialogOpen and isBreak}">
     <column main="center" cross="center">
-      <dialog text="Finish this break?" width="352" padding="18" on-dismiss="cancel_end_focus">
-        <column gap="10">
-          <spacer height="28" />
+      <dialog text="Finish this break?" width="352" padding="24" on-dismiss="cancel_end_focus">
+        <column gap="12">
+          <spacer height="16" />
           <text wrap="true" foreground="text_muted">Keep the rest taken so far, or discard this unfinished break.</text>
           <button variant="ghost" autofocus="true" on-press="cancel_end_focus">Continue break</button>
           <button variant="destructive" disabled="{saving or hasWriteError}" on-press="confirm_end_focus">Discard break</button>
           <button variant="primary" icon="check" disabled="{saving or hasWriteError}" on-press="finish_focus_now">Record break so far</button>
-          <spacer height="8" />
         </column>
       </dialog>
     </column>
