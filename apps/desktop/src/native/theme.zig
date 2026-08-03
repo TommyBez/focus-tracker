@@ -140,7 +140,17 @@ pub fn tokens(options: Options) canvas.DesignTokens {
                     .active_background = colors.accent,
                     .radius = 2,
                 },
-                .list_item = .{ .radius = 5 },
+                // The selected task is the one a block will run against, so
+                // its row reads as a choice rather than a neutral hover
+                // leftover. The wash stays a tint of the live accent, which
+                // high contrast still overrides wholesale.
+                .list_item = .{
+                    .active_background = withAlpha(colors.accent, switch (scheme) {
+                        .light => 0.12,
+                        .dark => 0.20,
+                    }),
+                    .radius = 5,
+                },
             },
         });
     }
@@ -260,4 +270,9 @@ test "standard appearance applies accent and native control refinements" {
     try std.testing.expectEqualDeep(actual.colors.accent, actual.controls.progress.active_background.?);
     try std.testing.expectEqual(@as(f32, 2), actual.controls.progress.radius.?);
     try std.testing.expectEqual(@as(f32, 5), actual.controls.list_item.radius.?);
+    try std.testing.expectEqualDeep(
+        withAlpha(actual.colors.accent, 0.12),
+        actual.controls.list_item.active_background.?,
+    );
+    try std.testing.expectEqual(@as(f32, 0.20), dark.controls.list_item.active_background.?.a);
 }

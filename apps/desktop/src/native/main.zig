@@ -294,8 +294,11 @@ fn modelWindows(model: *const Model, scratch: *App.WindowsScratch) []const App.W
             .label = settings_window_label,
             .canvas_label = settings_canvas_label,
             .title = "Settings",
-            .width = 680,
-            .height = 296,
+            // Each preference now pairs presets with a stepper, so the fixed
+            // window has to hold two controls per row without truncating the
+            // captions that state each value's range.
+            .width = 800,
+            .height = 330,
             .resizable = false,
             .activate_on_show = true,
             .on_close = .close_settings,
@@ -308,7 +311,10 @@ fn modelWindows(model: *const Model, scratch: *App.WindowsScratch) []const App.W
             .canvas_label = quick_canvas_label,
             .title = "Quick Focus",
             .width = 392,
-            .height = 392,
+            // The block-length stepper and its presets sit below the task
+            // chooser, so the companion needs the extra rows without pushing
+            // the list into a two-item scroll.
+            .height = 468,
             .resizable = false,
             .always_on_top = true,
             .activate_on_show = true,
@@ -1286,6 +1292,101 @@ test "status item exposes a bounded actionable idle menu" {
             if (!previous.separator) try std.testing.expect(previous.id != item.id);
         }
     }
+}
+
+/// A minimal, valid `FCS2` snapshot body: no tasks, no live session, no
+/// history. Tests that only exercise reducer branches use this instead of a
+/// live SQLite round trip, so they stay pure model tests.
+fn testWriteU32(buffer: []u8, at: *usize, value: u32) void {
+    std.mem.writeInt(u32, buffer[at.*..][0..4], value, .little);
+    at.* += 4;
+}
+
+fn testWriteU64(buffer: []u8, at: *usize, value: u64) void {
+    std.mem.writeInt(u64, buffer[at.*..][0..8], value, .little);
+    at.* += 8;
+}
+
+fn testEmptySnapshot(buffer: []u8, focus_minutes: u32) []const u8 {
+    var at: usize = 0;
+    @memcpy(buffer[0..4], "FCS2");
+    at = 4;
+    testWriteU32(buffer, &at, 2); // protocol version
+    testWriteU64(buffer, &at, 1); // revision
+    testWriteU32(buffer, &at, focus_minutes);
+    testWriteU32(buffer, &at, 5); // short break
+    testWriteU32(buffer, &at, 15); // long break
+    testWriteU32(buffer, &at, 120); // daily goal
+    buffer[at] = 1; // completion sound
+    at += 1;
+    testWriteU64(buffer, &at, 1); // next task id
+    testWriteU32(buffer, &at, 0); // task count
+    buffer[at] = 0; // no active session
+    at += 1;
+    testWriteU32(buffer, &at, 0); // recent session count
+    testWriteU64(buffer, &at, 0); // today focus ms
+    testWriteU32(buffer, &at, 0); // today completed sessions
+    testWriteU32(buffer, &at, 0); // today completed tasks
+    testWriteU32(buffer, &at, 7); // week bucket count
+    buffer[at] = 0; // today weekday
+    at += 1;
+    for (0..7) |_| testWriteU64(buffer, &at, 0);
+    return buffer[0..at];
+}
+
+/// The same shape as `testEmptySnapshot`, plus one open task and the session
+/// SQLite recovered at its deadline while handling an unrelated mutation.
+fn testRecoveredSnapshot(buffer: []u8) []const u8 {
+    const title = "Captured while the block ended";
+    var at: usize = 0;
+    @memcpy(buffer[0..4], "FCS2");
+    at = 4;
+    testWriteU32(buffer, &at, 2);
+    testWriteU64(buffer, &at, 2); // revision
+    testWriteU32(buffer, &at, 25);
+    testWriteU32(buffer, &at, 5);
+    testWriteU32(buffer, &at, 15);
+    testWriteU32(buffer, &at, 120);
+    buffer[at] = 1;
+    at += 1;
+    testWriteU64(buffer, &at, 4); // next task id
+    testWriteU32(buffer, &at, 1); // one task
+    testWriteU64(buffer, &at, 3); // task id
+    buffer[at] = 0; // open
+    at += 1;
+    testWriteU32(buffer, &at, 0); // sort order
+    testWriteU32(buffer, &at, 25); // estimate minutes
+    testWriteU64(buffer, &at, 500); // created
+    testWriteU64(buffer, &at, 500); // updated
+    testWriteU64(buffer, &at, 0); // completed
+    testWriteU32(buffer, &at, title.len);
+    @memcpy(buffer[at..][0..title.len], title);
+    at += title.len;
+    buffer[at] = 0; // no live session: the deadline was recovered
+    at += 1;
+    testWriteU32(buffer, &at, 1); // one recent session
+    testWriteU64(buffer, &at, 9); // session id
+    testWriteU64(buffer, &at, 3); // task id
+    buffer[at] = 0; // focus
+    at += 1;
+    buffer[at] = 2; // completed
+    at += 1;
+    buffer[at] = 3; // recovered
+    at += 1;
+    testWriteU64(buffer, &at, 1_000); // started
+    testWriteU64(buffer, &at, 0); // ends
+    testWriteU64(buffer, &at, 0); // remaining
+    testWriteU64(buffer, &at, 1_000); // planned
+    testWriteU64(buffer, &at, 1_000); // focused
+    testWriteU64(buffer, &at, 2_000); // ended
+    testWriteU64(buffer, &at, 0); // today focus ms
+    testWriteU32(buffer, &at, 1); // today completed sessions
+    testWriteU32(buffer, &at, 0); // today completed tasks
+    testWriteU32(buffer, &at, 7);
+    buffer[at] = 0;
+    at += 1;
+    for (0..7) |_| testWriteU64(buffer, &at, 0);
+    return buffer[0..at];
 }
 
 fn testStatusItemById(state: App.StatusItemState, id: u32) ?native_sdk.TrayMenuItem {
@@ -2459,4 +2560,449 @@ test "manual completion is recorded before the optional task decision" {
     try std.testing.expectEqual(@as(i64, 0), escaped.model.completionSessionId);
     try std.testing.expectEqual(core.SessionViewState.idle, core.sessionState(escaped.model));
     try std.testing.expectEqual(core.TaskState.open, escaped.model.tasks[0].state);
+}
+
+test "block length is chosen locally and only start commits it" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+    const task = core.rt.frameCreate(core.DbTask, .{
+        .id = 4,
+        .state = .open,
+        .sortOrder = 0,
+        .estimateMinutes = 25,
+        .createdMs = 10,
+        .updatedMs = 10,
+        .completedMs = 0,
+        .title = "Draft the release note",
+    });
+    const tasks = core.rt.frameAlloc(*const core.DbTask, 1);
+    tasks[0] = task;
+    model.tasks = tasks;
+    model.selectedTaskId = 4;
+
+    // Adjusting the next block writes nothing: no pending mutation, no
+    // command, and the persisted default is untouched.
+    const longer = core.update(model, .lengthen_focus);
+    try std.testing.expectEqual(@as(usize, 0), longer.cmd.len);
+    try std.testing.expectEqual(core.PendingKind.load, longer.model.pendingKind);
+    try std.testing.expect(!longer.model.saving);
+    try std.testing.expectEqual(@as(i64, 30), core.focusLengthMinutes(longer.model));
+    try std.testing.expectEqual(@as(i64, 25), core.settingsFocusMinutes(longer.model));
+
+    const preset = core.update(longer.model, .use_duration_90);
+    try std.testing.expectEqual(@as(i64, 90), core.focusLengthMinutes(preset.model));
+    try std.testing.expectEqual(@as(i64, 25), core.settingsFocusMinutes(preset.model));
+
+    // Only the start carries the chosen length into an authoritative write.
+    const started = core.update(preset.model, .start_focus);
+    try std.testing.expectEqual(core.PendingKind.timer_start, started.model.pendingKind);
+    try std.testing.expectEqual(@as(i64, 90), started.model.pendingDurationMinutes);
+}
+
+test "block length clamps at both ends of the protocol range" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+
+    var shortest = core.update(model, .shorten_focus);
+    var guard: usize = 0;
+    while (core.canShortenFocus(shortest.model) and guard < 64) : (guard += 1) {
+        shortest = core.update(shortest.model, .shorten_focus);
+    }
+    try std.testing.expectEqual(@as(i64, 5), core.focusLengthMinutes(shortest.model));
+    try std.testing.expect(!core.canShortenFocus(shortest.model));
+    // A press at the floor is inert rather than out of range.
+    const floored = core.update(shortest.model, .shorten_focus);
+    try std.testing.expectEqual(@as(i64, 5), core.focusLengthMinutes(floored.model));
+
+    var longest = core.update(model, .lengthen_focus);
+    guard = 0;
+    while (core.canLengthenFocus(longest.model) and guard < 64) : (guard += 1) {
+        longest = core.update(longest.model, .lengthen_focus);
+    }
+    try std.testing.expectEqual(@as(i64, 180), core.focusLengthMinutes(longest.model));
+    try std.testing.expect(!core.canLengthenFocus(longest.model));
+    const capped = core.update(longest.model, .lengthen_focus);
+    try std.testing.expectEqual(@as(i64, 180), core.focusLengthMinutes(capped.model));
+}
+
+test "settings steppers commit clamped defaults through the write slot" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+
+    const focus_up = core.update(model, .default_focus_up);
+    try std.testing.expectEqual(core.PendingKind.settings, focus_up.model.pendingKind);
+    try std.testing.expectEqual(@as(i64, 30), focus_up.model.pendingSettings.focusMinutes);
+    try std.testing.expect(focus_up.cmd.len > 0);
+
+    const goal_down = core.update(model, .daily_goal_down);
+    try std.testing.expectEqual(@as(i64, 105), goal_down.model.pendingSettings.dailyGoalMinutes);
+
+    const short_up = core.update(model, .short_break_up);
+    try std.testing.expectEqual(@as(i64, 6), short_up.model.pendingSettings.shortBreakMinutes);
+
+    const long_down = core.update(model, .long_break_down);
+    try std.testing.expectEqual(@as(i64, 10), long_down.model.pendingSettings.longBreakMinutes);
+
+    // A stepper already resting on its bound neither writes nor spins.
+    const floor_settings = core.rt.frameCreate(core.DbSettings, model.settings.*);
+    floor_settings.shortBreakMinutes = 1;
+    model.settings = floor_settings;
+    const held = core.update(model, .short_break_down);
+    try std.testing.expectEqual(@as(usize, 0), held.cmd.len);
+    try std.testing.expect(!held.model.saving);
+}
+
+test "the task a block is running against is owned by the transport" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+    const focused = core.rt.frameCreate(core.DbTask, .{
+        .id = 7,
+        .state = .open,
+        .sortOrder = 0,
+        .estimateMinutes = 25,
+        .createdMs = 10,
+        .updatedMs = 10,
+        .completedMs = 0,
+        .title = "Ship the migration",
+    });
+    const other = core.rt.frameCreate(core.DbTask, .{
+        .id = 8,
+        .state = .open,
+        .sortOrder = 1,
+        .estimateMinutes = 25,
+        .createdMs = 11,
+        .updatedMs = 11,
+        .completedMs = 0,
+        .title = "Answer the review thread",
+    });
+    const tasks = core.rt.frameAlloc(*const core.DbTask, 2);
+    tasks[0] = focused;
+    tasks[1] = other;
+    model.tasks = tasks;
+    model.selectedTaskId = 7;
+    model.actionTaskId = 7;
+    model.activeSession = core.rt.frameCreate(core.DbSession, .{
+        .id = 31,
+        .taskId = 7,
+        .mode = .focus,
+        .state = .running,
+        .completionReason = .none,
+        .startedMs = 1_000,
+        .endsMs = 1_501_000,
+        .remainingMs = 1_500_000,
+        .plannedMs = 1_500_000,
+        .focusedMs = 0,
+        .endedMs = 0,
+    });
+
+    try std.testing.expectEqual(@as(i64, 7), core.activeFocusTaskId(model));
+    try std.testing.expect(core.focusing(model));
+
+    const completing = core.update(model, .{ .toggle_task = 7 });
+    try std.testing.expectEqual(@as(usize, 0), completing.cmd.len);
+    try std.testing.expectEqual(core.PendingKind.load, completing.model.pendingKind);
+
+    const archiving = core.update(model, .{ .delete_task = 7 });
+    try std.testing.expectEqual(@as(usize, 0), archiving.cmd.len);
+    try std.testing.expectEqual(core.PendingKind.load, archiving.model.pendingKind);
+
+    const menu = core.update(model, .{ .toggle_task_actions = 7 });
+    try std.testing.expectEqual(@as(i64, -1), menu.model.taskActionsTaskId);
+
+    // Every other row keeps working, so an interruption can still be cleared
+    // or captured without breaking the block.
+    const other_menu = core.update(model, .{ .toggle_task_actions = 8 });
+    try std.testing.expectEqual(@as(i64, 8), other_menu.model.taskActionsTaskId);
+
+    const other_complete = core.update(model, .{ .toggle_task = 8 });
+    try std.testing.expectEqual(core.PendingKind.task_state, other_complete.model.pendingKind);
+    try std.testing.expectEqual(core.TaskState.completed, other_complete.model.pendingTaskState);
+}
+
+test "window control insets never open a gutter wider than the titlebar" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+
+    const leading = core.update(model, .{ .chrome_changed = .{
+        .insets = .{ .top = 52, .right = 0, .bottom = 0, .left = 0 },
+        .buttons = .{ .x = 20, .y = 0, .width = 54, .height = 16 },
+        .tabsProjected = false,
+    } });
+    try std.testing.expectEqual(@as(i64, 86), leading.model.chromeLeading);
+
+    // Trailing window controls (or an unsettled inset) must not translate
+    // into a gutter that pushes the titlebar off its own window.
+    const trailing = core.update(model, .{ .chrome_changed = .{
+        .insets = .{ .top = 52, .right = 0, .bottom = 0, .left = 0 },
+        .buttons = .{ .x = 1_140, .y = 0, .width = 54, .height = 16 },
+        .tabsProjected = false,
+    } });
+    try std.testing.expectEqual(@as(i64, 70), trailing.model.chromeLeading);
+}
+
+test "today's panel states the day without contradicting the ledger" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+    const stats = core.rt.frameCreate(core.DbStats, model.stats.*);
+    stats.todayFocusMs = 75 * 60_000;
+    stats.todayCompletedSessions = 3;
+    const week = core.rt.frameAlloc(*const core.DbDayFocus, 7);
+    const zero = core.rt.frameCreate(core.DbDayFocus, .{ .milliseconds = 0 });
+    const day = core.rt.frameCreate(core.DbDayFocus, .{ .milliseconds = 50 * 60_000 });
+    const best = core.rt.frameCreate(core.DbDayFocus, .{ .milliseconds = 90 * 60_000 });
+    const today = core.rt.frameCreate(core.DbDayFocus, .{ .milliseconds = 75 * 60_000 });
+    week[0] = zero;
+    week[1] = zero;
+    week[2] = zero;
+    week[3] = zero;
+    week[4] = best;
+    week[5] = day;
+    week[6] = today;
+    stats.weekFocusMs = week;
+    model.stats = stats;
+
+    try std.testing.expectEqualStrings("1 h 15 min", core.todayFocusText(model));
+    try std.testing.expectEqual(@as(i64, 3), core.todayBlockCount(model));
+    try std.testing.expectEqualStrings("45 min to go", core.todayGoalRemainingText(model));
+    try std.testing.expect(!core.todayGoalReached(model));
+    try std.testing.expectEqual(@as(i64, 3), core.weekActiveDays(model));
+    try std.testing.expectEqualStrings("1 h 11 min", core.weekAverageText(model));
+    try std.testing.expectEqualStrings("1 h 30 min", core.weekBestText(model));
+
+    // A day that has not started yet states zero rather than borrowing from
+    // the days around it. The panel carries no streak, score, or grade.
+    today.milliseconds = 0;
+    stats.todayFocusMs = 0;
+    stats.todayCompletedSessions = 0;
+    try std.testing.expectEqual(@as(i64, 2), core.weekActiveDays(model));
+    try std.testing.expectEqual(@as(i64, 0), core.todayBlockCount(model));
+    try std.testing.expectEqualStrings("0 min", core.todayFocusText(model));
+    try std.testing.expectEqualStrings("2 h to go", core.todayGoalRemainingText(model));
+
+    stats.todayFocusMs = 200 * 60_000;
+    try std.testing.expect(core.todayGoalReached(model));
+    try std.testing.expectEqualStrings("Daily goal reached", core.todayGoalRemainingText(model));
+}
+
+test "an unclaimed space bar works the transport and never conjures a block" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+    const task = core.rt.frameCreate(core.DbTask, .{
+        .id = 5,
+        .state = .open,
+        .sortOrder = 0,
+        .estimateMinutes = 25,
+        .createdMs = 10,
+        .updatedMs = 10,
+        .completedMs = 0,
+        .title = "Trim the migration script",
+    });
+    const tasks = core.rt.frameAlloc(*const core.DbTask, 1);
+    tasks[0] = task;
+    model.tasks = tasks;
+    model.selectedTaskId = 5;
+
+    const bare_space = core.keyMsg(.{
+        .key = "space",
+        .shift = false,
+        .control = false,
+        .alt = false,
+        .super = false,
+    });
+    try std.testing.expect(bare_space != null);
+
+    // Idle: the shortcut that starts a block is deliberately the explicit
+    // one. A stray press on empty canvas must not commit focus time.
+    const idle = core.update(model, .space_transport);
+    try std.testing.expectEqual(@as(usize, 0), idle.cmd.len);
+    try std.testing.expectEqual(core.PendingKind.load, idle.model.pendingKind);
+
+    const running = core.rt.frameCreate(core.DbSession, .{
+        .id = 44,
+        .taskId = 5,
+        .mode = .focus,
+        .state = .running,
+        .completionReason = .none,
+        .startedMs = 1_000,
+        .endsMs = 1_501_000,
+        .remainingMs = 1_500_000,
+        .plannedMs = 1_500_000,
+        .focusedMs = 0,
+        .endedMs = 0,
+    });
+    model.activeSession = running;
+    const paused = core.update(model, .space_transport);
+    try std.testing.expectEqual(core.PendingKind.timer_pause, paused.model.pendingKind);
+    try std.testing.expect(paused.cmd.len > 0);
+
+    running.state = .paused;
+    const resumed = core.update(model, .space_transport);
+    try std.testing.expectEqual(core.PendingKind.timer_resume, resumed.model.pendingKind);
+
+    // Modified space keeps belonging to the platform.
+    try std.testing.expect(core.keyMsg(.{
+        .key = "space",
+        .shift = false,
+        .control = false,
+        .alt = false,
+        .super = true,
+    }) == null);
+}
+
+test "a break never consumes the length chosen for the next focus block" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+
+    // Choose 45 for the next focus block, then resolve a BREAK.
+    var chosen = core.update(model, .use_duration_50);
+    chosen = core.update(chosen.model, .shorten_focus);
+    try std.testing.expectEqual(@as(i64, 45), core.focusLengthMinutes(chosen.model));
+
+    var snapshot_buffer: [256]u8 = undefined;
+    const snapshot = testEmptySnapshot(&snapshot_buffer, 25);
+
+    const resolving = core.rt.frameCreate(core.Model, chosen.model.*);
+    resolving.pendingKind = .timer_complete_manual;
+    resolving.pendingMode = .short;
+    const after_break = core.update(resolving, .{ .db_ok = snapshot });
+    try std.testing.expectEqual(core.LoadState.ready, after_break.model.loadState);
+    try std.testing.expectEqual(@as(i64, 45), core.focusLengthMinutes(after_break.model));
+
+    // Resolving the focus block it was chosen for does return to the default.
+    const focus_resolving = core.rt.frameCreate(core.Model, chosen.model.*);
+    focus_resolving.pendingKind = .timer_complete_manual;
+    focus_resolving.pendingMode = .focus;
+    const after_focus = core.update(focus_resolving, .{ .db_ok = snapshot });
+    try std.testing.expectEqual(@as(i64, 25), core.focusLengthMinutes(after_focus.model));
+}
+
+test "a deadline recovered inside a task write still reaches the completion review" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+    model.saving = true;
+    // The rail composes tasks mid-block, so a create can land on the exact
+    // response where SQLite recovered the expired session for it.
+    model.pendingKind = .task_create;
+    model.pendingTitle = "Captured while the block ended";
+    model.activeSession = core.rt.frameCreate(core.DbSession, .{
+        .id = 9,
+        .taskId = 3,
+        .mode = .focus,
+        .state = .running,
+        .completionReason = .none,
+        .startedMs = 1_000,
+        .endsMs = 2_000,
+        .remainingMs = 1_000,
+        .plannedMs = 1_000,
+        .focusedMs = 0,
+        .endedMs = 0,
+    });
+
+    var buffer: [512]u8 = undefined;
+    const snapshot = testRecoveredSnapshot(&buffer);
+    const recovered = core.update(model, .{ .db_ok = snapshot });
+
+    try std.testing.expectEqual(core.LoadState.ready, recovered.model.loadState);
+    try std.testing.expect(recovered.model.activeSession == null);
+    try std.testing.expectEqual(core.SessionViewState.complete, core.sessionState(recovered.model));
+    try std.testing.expect(recovered.model.completionDialogOpen);
+    try std.testing.expectEqual(@as(i64, 3), recovered.model.completionTaskId);
+    try std.testing.expectEqual(@as(i64, 9), recovered.model.completionSessionId);
+    try std.testing.expect(recovered.model.quickWindowOpen);
+    try std.testing.expect(recovered.cmd.len > 0);
+    // The create's own follow-up still ran: the composer is empty again.
+    try std.testing.expectEqual(@as(usize, 0), recovered.model.taskDraftEditor.text.len);
+}
+
+test "an unrelated preference commit leaves the chosen block length alone" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+
+    const chosen = core.update(model, .use_duration_90);
+    try std.testing.expectEqual(@as(i64, 90), core.focusLengthMinutes(chosen.model));
+
+    var buffer: [256]u8 = undefined;
+
+    // Toggling the sound commits settings without touching the focus default.
+    const sound_commit = core.rt.frameCreate(core.Model, chosen.model.*);
+    sound_commit.pendingKind = .settings;
+    const unchanged = core.update(sound_commit, .{ .db_ok = testEmptySnapshot(&buffer, 25) });
+    try std.testing.expectEqual(@as(i64, 90), core.focusLengthMinutes(unchanged.model));
+
+    // Changing the focus default itself does make it authoritative again.
+    const default_commit = core.rt.frameCreate(core.Model, chosen.model.*);
+    default_commit.pendingKind = .settings;
+    const adopted = core.update(default_commit, .{ .db_ok = testEmptySnapshot(&buffer, 45) });
+    try std.testing.expectEqual(@as(i64, 45), core.focusLengthMinutes(adopted.model));
+}
+
+test "duration steppers span the validator's range and never move the wrong way" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+
+    // Every ceiling matches what protocol.ts and the SQLite validator accept.
+    const settings = core.rt.frameCreate(core.DbSettings, model.settings.*);
+    settings.shortBreakMinutes = 60;
+    settings.longBreakMinutes = 120;
+    settings.dailyGoalMinutes = 1440;
+    model.settings = settings;
+    try std.testing.expectEqual(@as(usize, 0), core.update(model, .short_break_up).cmd.len);
+    try std.testing.expectEqual(@as(usize, 0), core.update(model, .long_break_up).cmd.len);
+    try std.testing.expectEqual(@as(usize, 0), core.update(model, .daily_goal_up).cmd.len);
+    try std.testing.expectEqual(@as(i64, 59), core.update(model, .short_break_down).model.pendingSettings.shortBreakMinutes);
+
+    // A stored value beyond a product ceiling is never shortened by the
+    // control that is supposed to lengthen it.
+    settings.shortBreakMinutes = 45;
+    const lengthened = core.update(model, .short_break_up);
+    try std.testing.expectEqual(@as(i64, 46), lengthened.model.pendingSettings.shortBreakMinutes);
+
+    // A value below a floor recovers upward instead of being pinned there.
+    settings.longBreakMinutes = 3;
+    const raised = core.update(model, .long_break_up);
+    try std.testing.expectEqual(@as(i64, 5), raised.model.pendingSettings.longBreakMinutes);
+    try std.testing.expectEqual(@as(usize, 0), core.update(model, .long_break_down).cmd.len);
 }

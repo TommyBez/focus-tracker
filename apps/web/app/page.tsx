@@ -19,7 +19,7 @@ const workflow = [
   },
   {
     title: "Commit",
-    copy: "Give it 25, 50, or 90 minutes. Pause, resume, or end the block deliberately.",
+    copy: "Give it 5 to 180 minutes. Pause, resume, or end the block deliberately.",
     evidenceTitle: "Session recovery",
     evidenceCopy: "Quit mid-block and restore the running or paused session from SQLite.",
   },
@@ -127,8 +127,8 @@ export default function Home() {
             </h1>
             <div className={styles.heroIntro}>
               <p>
-                Commit to 25, 50, or 90 minutes. Focus Tracker keeps the result in a private
-                local ledger.
+                Commit to a block of any length from 5 to 180 minutes. Focus Tracker keeps
+                the result in a private local ledger.
               </p>
               <DownloadActions />
               <p className={styles.platformNote}>

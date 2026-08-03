@@ -34,6 +34,9 @@ database and repeat the persistence-sensitive journeys after relaunch.
 | F8 | Relaunch recovery | Relaunch while running and paused; preserve the authoritative session and expose the correct next action |
 | F9 | Error recovery | Exercise retryable writes, destructive confirmation, Escape, and stale callbacks without silent data loss |
 | F10 | Installed artifact | Mount the DMG, drag to Applications, launch the copied app, repeat a short journey, quit cleanly, and verify SQLite integrity |
+| F11 | Block length | Set a non-preset length with the stepper, start it, and confirm the session's planned duration matches without a preference write; confirm Settings still owns the persisted default |
+| F12 | Mid-block capture | Add, rename, complete, and archive other tasks while a block runs; confirm the running task's own row refuses completion and archiving and that the session survives every write |
+| F13 | Completion is never skipped | With a recorded block awaiting its task decision, confirm the transport shortcut and the menu-bar toggle refuse to start the next block; and that a task or preference write landing exactly on the deadline still surfaces the completion review rather than collapsing to idle |
 
 For every journey record task success, critical errors, recovery success,
 unexpected windows, input-to-feedback latency, focus order, and the final
@@ -146,6 +149,34 @@ One expert audit can discover defects and issue a veto. It cannot establish
 human learnability or a population-level preference. Those claims require
 fresh participants, recorded task outcomes, and a declared sample; they must
 never be inferred from a screenshot score.
+
+## Interface rework — Today, Quick Focus, and Settings
+
+The chamber, the rail's mid-block behaviour, the block-length control, and the
+Settings steppers were reworked after the closeout above. That work carries its
+own evidence class and does **not** re-attribute the 2026-07-31 journey pass:
+
+- The model contract, all three strict markup checks, and `native validate
+  app.zon` pass for the reworked sources.
+- The pure-model native suite grew by eleven tests covering the local block-length
+  draft, its clamping at both ends of the protocol range, the committing
+  Settings steppers, transport ownership of the running task's row, the
+  titlebar gutter clamp, every Today-panel derivation, the unclaimed-Space
+  transport fallback, a break leaving the next focus block's length alone, a
+  deadline recovered inside a task write still reaching the completion review,
+  an unrelated preference commit not reclaiming the chosen length, and the
+  steppers spanning the validator's range without ever moving a stored value
+  in the direction opposite to the press.
+- Journeys F1, F3, F4, F6, F7, F11, and F12 were re-driven against a running
+  build through real widget input on an isolated database, including a
+  first-run empty ledger, a non-preset 35-minute block, mid-block task capture,
+  the break lifecycle, a Settings stepper commit read back from SQLite, and
+  F13's refusal to start a block over an unanswered completion.
+- That re-drive used the Linux GTK host, which is a development harness only.
+  It proves layout, reachability, semantics, and the model/SQLite round trip;
+  it is not macOS visual evidence and does not substitute for F2, F5, F8, F9,
+  or F10 on Apple Silicon. Those journeys must be repeated on macOS before the
+  next release candidate.
 
 ## Current comparative status
 
