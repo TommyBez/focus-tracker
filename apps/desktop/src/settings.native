@@ -2,17 +2,21 @@
   Preferences commit immediately through the authoritative SQLite snapshot.
   The fixed-size macOS window keeps the controls dense, grouped, and calm.
 -->
-<column background="background" grow="1" padding="16" gap="10" label="Focus Tracker settings">
-  <row grow="1" gap="12" cross="stretch">
+<column background="background" grow="1" padding="16" gap="12" label="Focus Tracker settings">
+  <!--
+    The cards hug their content instead of absorbing the window's spare
+    height, so the transient "Saving" row below never resizes them.
+  -->
+  <row gap="16" cross="stretch">
     <column
       grow="1"
       background="surface_subtle"
       radius="lg"
-      padding="14"
-      gap="8"
+      padding="16"
+      gap="12"
       label="Timer default settings"
     >
-      <column gap="2">
+      <column gap="4">
         <text><span weight="medium">Timer defaults</span></text>
         <text size="sm" foreground="text_muted">Default lengths for focus and breaks.</text>
       </column>
@@ -20,7 +24,7 @@
       <separator />
 
       <row gap="12" cross="center">
-        <column grow="1" gap="1">
+        <column grow="1" gap="4">
           <text><span weight="medium">Focus block</span></text>
           <text size="sm" foreground="text_muted">Default work interval</text>
         </column>
@@ -34,7 +38,7 @@
       <separator />
 
       <row gap="12" cross="center">
-        <column grow="1" gap="1">
+        <column grow="1" gap="4">
           <text><span weight="medium">Short break</span></text>
           <text size="sm" foreground="text_muted">After each focus block</text>
         </column>
@@ -48,7 +52,7 @@
       <separator />
 
       <row gap="12" cross="center">
-        <column grow="1" gap="1">
+        <column grow="1" gap="4">
           <text><span weight="medium">Long break</span></text>
           <text size="sm" foreground="text_muted">After every fourth block</text>
         </column>
@@ -64,19 +68,19 @@
       width="220"
       background="surface_subtle"
       radius="lg"
-      padding="14"
-      gap="8"
+      padding="16"
+      gap="12"
       label="Daily settings"
     >
-      <column gap="2">
+      <column gap="4">
         <text><span weight="medium">Daily</span></text>
         <text size="sm" foreground="text_muted">Goal and notification settings.</text>
       </column>
 
       <separator />
 
-      <column gap="6">
-        <column gap="1">
+      <column gap="8">
+        <column gap="4">
           <text><span weight="medium">Focus goal</span></text>
           <text size="sm" foreground="text_muted">Minutes per day</text>
         </column>
@@ -89,8 +93,8 @@
 
       <separator />
 
-      <row gap="10" cross="center">
-        <column grow="1" gap="1">
+      <row gap="12" cross="center">
+        <column grow="1" gap="4">
           <text><span weight="medium">Completion sound</span></text>
           <text size="sm" foreground="text_muted">Chime when time ends</text>
         </column>
@@ -107,13 +111,13 @@
 
   <if test="{saving or hasWriteError}">
     <if test="{saving}">
-      <row height="28" gap="8" cross="center" label="Saving settings">
+      <row height="32" gap="8" cross="center" label="Saving settings">
         <spinner />
         <text size="sm" foreground="text_muted">Saving</text>
       </row>
     </if>
     <else>
-      <row height="28" gap="8" cross="center" label="Settings were not saved">
+      <row height="32" gap="8" cross="center" label="Settings were not saved">
         <text size="sm" foreground="destructive"><span weight="medium">Unable to save</span></text>
         <text size="sm" foreground="text_muted" grow="1" overflow="ellipsis">{writeErrorText}</text>
         <button size="sm" variant="ghost" on-press="discard_failed_change">Discard</button>
