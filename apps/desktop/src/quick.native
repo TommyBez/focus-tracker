@@ -54,7 +54,7 @@
         <if test="{sessionState == 'idle'}">
           <column grow="1" gap="10" label="Prepare a focus block">
             <scroll grow="1" overscroll="rubber_band">
-              <column gap="8">
+              <column gap="8" padding="4">
                 <if test="{breakAcknowledgementOpen}">
                   <row background="surface_subtle" radius="lg" padding="10" gap="8" cross="center" label="Break recorded">
                     <column gap="1" grow="1">
