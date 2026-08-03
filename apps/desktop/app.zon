@@ -3,7 +3,7 @@
     .name = "focus-tracker",
     .display_name = "Focus Tracker",
     .description = "A quiet native task ledger and focus timer for macOS.",
-    .version = "0.1.1",
+    .version = "0.1.2",
     .icons = .{"assets/icon.png"},
     .platforms = .{"macos"},
     .permissions = .{ "view", "command", "window", "filesystem" },
