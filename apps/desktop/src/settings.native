@@ -37,7 +37,7 @@
             <toggle-button size="sm" selected="{settingsFocusMinutes == 90}" autofocus="{settingsFocusMinutes == 90}" disabled="{saving or hasWriteError}" on-toggle="set_duration_90">90</toggle-button>
           </toggle-group>
           <row width="132" gap="4" cross="center" main="end">
-            <button size="icon" variant="outline" icon="chevron-down" label="Shorten the default focus block by 5 minutes" disabled="{saving or hasWriteError}" on-press="default_focus_down"></button>
+            <button size="icon" variant="outline" icon="chevron-down" autofocus="{not settingsFocusIsPreset}" label="Shorten the default focus block by 5 minutes" disabled="{saving or hasWriteError}" on-press="default_focus_down"></button>
             <text width="60" text-alignment="center" label="{settingsFocusMinutes ++ ' minute default focus block, 5 to 180 minutes'}"><span mono="true" weight="medium">{settingsFocusMinutes} min</span></text>
             <button size="icon" variant="outline" icon="chevron-up" label="Lengthen the default focus block by 5 minutes" disabled="{saving or hasWriteError}" on-press="default_focus_up"></button>
           </row>

@@ -397,13 +397,13 @@ const FOCUS_MIN = 5;
 const FOCUS_MAX = 180;
 const SHORT_BREAK_STEP = 1;
 const SHORT_BREAK_MIN = 1;
-const SHORT_BREAK_MAX = 30;
+const SHORT_BREAK_MAX = 60;
 const LONG_BREAK_STEP = 5;
 const LONG_BREAK_MIN = 5;
-const LONG_BREAK_MAX = 60;
+const LONG_BREAK_MAX = 120;
 const GOAL_STEP = 15;
 const GOAL_MIN = 15;
-const GOAL_MAX = 600;
+const GOAL_MAX = 1440;
 
 function emptyEditor(): TextEditState {
   return { text: EMPTY, selection: { anchor: 0, focus: 0 }, composition: null };
@@ -622,10 +622,20 @@ function clamped(value: number, low: number, high: number): number {
 // Step to the next multiple of `step` in the requested direction so a value
 // arriving from an odd preset (or an older database) still lands on a round
 // number instead of inheriting the offset forever.
+//
+// The step is monotonic by construction: a value already outside the range
+// stays put rather than being clamped in the direction opposite to the press,
+// so "lengthen" can never shorten a stored value and "shorten" can never
+// lengthen one.
 function stepped(value: number, step: number, up: boolean, low: number, high: number): number {
   const offset = value % step;
   const next = up ? value + step - offset : offset === 0 ? value - step : value - offset;
-  return clamped(next, low, high);
+  if (up) {
+    if (value >= high) return value;
+    return next > high ? high : next;
+  }
+  if (value <= low) return value;
+  return next < low ? low : next;
 }
 
 function minutesText(minutes: number): Bytes {
@@ -1115,6 +1125,14 @@ export function canShortenFocus(model: Model): boolean {
 
 export function settingsFocusMinutes(model: Model): number {
   return model.settings.focusMinutes;
+}
+
+// The stepper can persist any length in the protocol's range, so the three
+// presets no longer cover every state. Settings uses this to keep an initial
+// keyboard focus target when none of them matches.
+export function settingsFocusIsPreset(model: Model): boolean {
+  const minutes = model.settings.focusMinutes;
+  return minutes === 25 || minutes === 50 || minutes === 90;
 }
 
 export function shortBreakMinutes(model: Model): number {
@@ -2587,27 +2605,37 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
         };
       } else {
       const snapshot = decoded.value;
-      let operation: PendingKind = model.pendingKind;
-      let completedDuringRefresh = false;
-      if (operation === "refresh" && snapshot.activeSession === null) {
-        if (model.activeSession !== null) {
-          if (includesCompletedSession(snapshot.recentSessions, model.activeSession.id)) {
-            // A sleep/wake can cross the deadline before the best-effort
-            // refresh following Retry. Preserve normal completion UX instead
-            // of silently collapsing from running to idle.
-            completedDuringRefresh = true;
-            operation = "timer_complete_natural";
-          }
-        }
+      const operation: PendingKind = model.pendingKind;
+      // SQLite recovers an expired deadline inside EVERY non-timer mutation,
+      // not only inside a refresh: renaming a task, ticking a checkbox, or
+      // saving a preference at the moment a block ends all come back with the
+      // session already completed. Without this the response reads as an
+      // ordinary write and the block silently collapses to idle, losing the
+      // completion decision, the sound, and the recorded block's follow-up.
+      let recoveredCompletion = false;
+      if (
+        operation !== "timer_complete_natural" &&
+        operation !== "timer_complete_manual" &&
+        operation !== "timer_cancel" &&
+        snapshot.activeSession === null &&
+        model.activeSession !== null &&
+        includesCompletedSession(snapshot.recentSessions, model.activeSession.id)
+      ) {
+        recoveredCompletion = true;
       }
       let completedMode: SessionMode = model.pendingMode;
       let completedTaskId = model.pendingTaskId;
-      if (completedDuringRefresh) {
+      if (recoveredCompletion) {
         if (model.activeSession !== null) {
           completedMode = model.activeSession.mode;
           completedTaskId = model.activeSession.taskId;
         }
       }
+      // The mutation keeps its own identity so its post-steps still run; the
+      // recovered completion is layered on top of them.
+      const naturalCompletion = operation === "timer_complete_natural" || recoveredCompletion;
+      const resolvesBlock =
+        naturalCompletion || operation === "timer_complete_manual";
       const wallClockRolledBack = model.pendingClockRollback;
       const refreshAfterRetry = model.pendingNeedsFreshSnapshot;
       const loadObservedSameRevision =
@@ -2637,15 +2665,17 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
       // and once the block it was chosen for has been resolved. Anything else
       // (a task edit, an archive, a pause) leaves the user's choice alone.
       const resolvedFocusBlock =
-        completedMode === "focus" &&
-        (operation === "timer_cancel" ||
-          operation === "timer_complete_natural" ||
-          operation === "timer_complete_manual");
+        completedMode === "focus" && (operation === "timer_cancel" || resolvesBlock);
+      // settingsIntentModel also backs the sound switch, the break steppers,
+      // and the goal steppers. Only a committed change to the focus default
+      // itself makes that default authoritative over the chosen block again.
+      const focusDefaultCommitted =
+        operation === "settings" && snapshot.settings.focusMinutes !== model.settings.focusMinutes;
       // A break is not the block whose length was chosen, so finishing or
       // discarding one leaves the next focus block's length alone.
       const draftFollowsDefault =
         operation === "load" ||
-        operation === "settings" ||
+        focusDefaultCommitted ||
         operation === "task_after_focus" ||
         resolvedFocusBlock;
       const draftMinutes = draftFollowsDefault
@@ -2794,23 +2824,20 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
           composerKey: next.composerKey + 1,
         };
       }
-      if (operation === "timer_complete_natural" || operation === "timer_complete_manual") {
+      if (resolvesBlock) {
         const wasFocus = completedMode === "focus";
         let completedSessionId = 0;
         const completed = model.activeSession;
         if (completed !== null) completedSessionId = completed.id;
         next = {
           ...next,
-          quickWindowOpen:
-            operation === "timer_complete_natural" ? true : next.quickWindowOpen,
-          settingsWindowOpen:
-            operation === "timer_complete_natural" ? false : next.settingsWindowOpen,
+          quickWindowOpen: naturalCompletion ? true : next.quickWindowOpen,
+          settingsWindowOpen: naturalCompletion ? false : next.settingsWindowOpen,
           completionDialogOpen: wasFocus,
           breakAcknowledgementOpen: !wasFocus,
           completionTaskId: wasFocus ? completedTaskId : 0,
           completionSessionId: completedSessionId,
-          dialogSurface:
-            operation === "timer_complete_natural" ? "quick" : model.dialogSurface,
+          dialogSurface: naturalCompletion ? "quick" : model.dialogSurface,
           paneFraction: wasFocus ? FOCUS_PANE : DEFAULT_PANE,
           endDialogOpen: false,
           composerKey: wasFocus ? next.composerKey : next.composerKey + 1,
@@ -2889,7 +2916,7 @@ export function update(model: Model, msg: Msg): Model | [Model, Cmd<Msg>] {
           ];
         }
       }
-      if (operation === "timer_complete_natural") {
+      if (naturalCompletion) {
         if (completedMode !== "focus" || !next.settings.soundEnabled) {
           if (refreshAfterRetry) {
             return [

@@ -1334,6 +1334,61 @@ fn testEmptySnapshot(buffer: []u8, focus_minutes: u32) []const u8 {
     return buffer[0..at];
 }
 
+/// The same shape as `testEmptySnapshot`, plus one open task and the session
+/// SQLite recovered at its deadline while handling an unrelated mutation.
+fn testRecoveredSnapshot(buffer: []u8) []const u8 {
+    const title = "Captured while the block ended";
+    var at: usize = 0;
+    @memcpy(buffer[0..4], "FCS2");
+    at = 4;
+    testWriteU32(buffer, &at, 2);
+    testWriteU64(buffer, &at, 2); // revision
+    testWriteU32(buffer, &at, 25);
+    testWriteU32(buffer, &at, 5);
+    testWriteU32(buffer, &at, 15);
+    testWriteU32(buffer, &at, 120);
+    buffer[at] = 1;
+    at += 1;
+    testWriteU64(buffer, &at, 4); // next task id
+    testWriteU32(buffer, &at, 1); // one task
+    testWriteU64(buffer, &at, 3); // task id
+    buffer[at] = 0; // open
+    at += 1;
+    testWriteU32(buffer, &at, 0); // sort order
+    testWriteU32(buffer, &at, 25); // estimate minutes
+    testWriteU64(buffer, &at, 500); // created
+    testWriteU64(buffer, &at, 500); // updated
+    testWriteU64(buffer, &at, 0); // completed
+    testWriteU32(buffer, &at, title.len);
+    @memcpy(buffer[at..][0..title.len], title);
+    at += title.len;
+    buffer[at] = 0; // no live session: the deadline was recovered
+    at += 1;
+    testWriteU32(buffer, &at, 1); // one recent session
+    testWriteU64(buffer, &at, 9); // session id
+    testWriteU64(buffer, &at, 3); // task id
+    buffer[at] = 0; // focus
+    at += 1;
+    buffer[at] = 2; // completed
+    at += 1;
+    buffer[at] = 3; // recovered
+    at += 1;
+    testWriteU64(buffer, &at, 1_000); // started
+    testWriteU64(buffer, &at, 0); // ends
+    testWriteU64(buffer, &at, 0); // remaining
+    testWriteU64(buffer, &at, 1_000); // planned
+    testWriteU64(buffer, &at, 1_000); // focused
+    testWriteU64(buffer, &at, 2_000); // ended
+    testWriteU64(buffer, &at, 0); // today focus ms
+    testWriteU32(buffer, &at, 1); // today completed sessions
+    testWriteU32(buffer, &at, 0); // today completed tasks
+    testWriteU32(buffer, &at, 7);
+    buffer[at] = 0;
+    at += 1;
+    for (0..7) |_| testWriteU64(buffer, &at, 0);
+    return buffer[0..at];
+}
+
 fn testStatusItemById(state: App.StatusItemState, id: u32) ?native_sdk.TrayMenuItem {
     for (state.items) |item| {
         if (!item.separator and item.id == id) return item;
@@ -2850,4 +2905,104 @@ test "a break never consumes the length chosen for the next focus block" {
     focus_resolving.pendingMode = .focus;
     const after_focus = core.update(focus_resolving, .{ .db_ok = snapshot });
     try std.testing.expectEqual(@as(i64, 25), core.focusLengthMinutes(after_focus.model));
+}
+
+test "a deadline recovered inside a task write still reaches the completion review" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+    model.saving = true;
+    // The rail composes tasks mid-block, so a create can land on the exact
+    // response where SQLite recovered the expired session for it.
+    model.pendingKind = .task_create;
+    model.pendingTitle = "Captured while the block ended";
+    model.activeSession = core.rt.frameCreate(core.DbSession, .{
+        .id = 9,
+        .taskId = 3,
+        .mode = .focus,
+        .state = .running,
+        .completionReason = .none,
+        .startedMs = 1_000,
+        .endsMs = 2_000,
+        .remainingMs = 1_000,
+        .plannedMs = 1_000,
+        .focusedMs = 0,
+        .endedMs = 0,
+    });
+
+    var buffer: [512]u8 = undefined;
+    const snapshot = testRecoveredSnapshot(&buffer);
+    const recovered = core.update(model, .{ .db_ok = snapshot });
+
+    try std.testing.expectEqual(core.LoadState.ready, recovered.model.loadState);
+    try std.testing.expect(recovered.model.activeSession == null);
+    try std.testing.expectEqual(core.SessionViewState.complete, core.sessionState(recovered.model));
+    try std.testing.expect(recovered.model.completionDialogOpen);
+    try std.testing.expectEqual(@as(i64, 3), recovered.model.completionTaskId);
+    try std.testing.expectEqual(@as(i64, 9), recovered.model.completionSessionId);
+    try std.testing.expect(recovered.model.quickWindowOpen);
+    try std.testing.expect(recovered.cmd.len > 0);
+    // The create's own follow-up still ran: the composer is empty again.
+    try std.testing.expectEqual(@as(usize, 0), recovered.model.taskDraftEditor.text.len);
+}
+
+test "an unrelated preference commit leaves the chosen block length alone" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+
+    const chosen = core.update(model, .use_duration_90);
+    try std.testing.expectEqual(@as(i64, 90), core.focusLengthMinutes(chosen.model));
+
+    var buffer: [256]u8 = undefined;
+
+    // Toggling the sound commits settings without touching the focus default.
+    const sound_commit = core.rt.frameCreate(core.Model, chosen.model.*);
+    sound_commit.pendingKind = .settings;
+    const unchanged = core.update(sound_commit, .{ .db_ok = testEmptySnapshot(&buffer, 25) });
+    try std.testing.expectEqual(@as(i64, 90), core.focusLengthMinutes(unchanged.model));
+
+    // Changing the focus default itself does make it authoritative again.
+    const default_commit = core.rt.frameCreate(core.Model, chosen.model.*);
+    default_commit.pendingKind = .settings;
+    const adopted = core.update(default_commit, .{ .db_ok = testEmptySnapshot(&buffer, 45) });
+    try std.testing.expectEqual(@as(i64, 45), core.focusLengthMinutes(adopted.model));
+}
+
+test "duration steppers span the validator's range and never move the wrong way" {
+    core.rt.resetAll();
+    defer core.rt.resetAll();
+
+    const seed = core.initialModel().model;
+    const model = core.rt.frameCreate(core.Model, seed.*);
+    model.loadState = .ready;
+
+    // Every ceiling matches what protocol.ts and the SQLite validator accept.
+    const settings = core.rt.frameCreate(core.DbSettings, model.settings.*);
+    settings.shortBreakMinutes = 60;
+    settings.longBreakMinutes = 120;
+    settings.dailyGoalMinutes = 1440;
+    model.settings = settings;
+    try std.testing.expectEqual(@as(usize, 0), core.update(model, .short_break_up).cmd.len);
+    try std.testing.expectEqual(@as(usize, 0), core.update(model, .long_break_up).cmd.len);
+    try std.testing.expectEqual(@as(usize, 0), core.update(model, .daily_goal_up).cmd.len);
+    try std.testing.expectEqual(@as(i64, 59), core.update(model, .short_break_down).model.pendingSettings.shortBreakMinutes);
+
+    // A stored value beyond a product ceiling is never shortened by the
+    // control that is supposed to lengthen it.
+    settings.shortBreakMinutes = 45;
+    const lengthened = core.update(model, .short_break_up);
+    try std.testing.expectEqual(@as(i64, 46), lengthened.model.pendingSettings.shortBreakMinutes);
+
+    // A value below a floor recovers upward instead of being pinned there.
+    settings.longBreakMinutes = 3;
+    const raised = core.update(model, .long_break_up);
+    try std.testing.expectEqual(@as(i64, 5), raised.model.pendingSettings.longBreakMinutes);
+    try std.testing.expectEqual(@as(usize, 0), core.update(model, .long_break_down).cmd.len);
 }
