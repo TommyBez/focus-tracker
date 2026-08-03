@@ -101,6 +101,22 @@ pub fn tokens(options: Options) canvas.DesignTokens {
             .dark => 0.14,
         });
 
+        // The highlighted menu row and its pressed step, both measured
+        // against `colors.surface` (see `.menu_item` below). Light reaches
+        // the 3:1 bar with the accent itself; on the near-black dark popover
+        // even the fully opaque accent stops at 2.98:1, so the dark pair
+        // lifts the accent toward the scheme's ink until it clears — the
+        // smallest lift that does, because every step past it is spent from
+        // the label's own contrast.
+        const menu_highlight = switch (scheme) {
+            .light => mix(colors.surface, colors.accent, 0.70),
+            .dark => mix(colors.accent, colors.text, 0.06),
+        };
+        const menu_press = switch (scheme) {
+            .light => mix(colors.surface, colors.accent, 0.80),
+            .dark => mix(colors.accent, colors.text, 0.12),
+        };
+
         resolved = resolved.withOverrides(.{
             .stroke = .{
                 .focus = 1.5,
@@ -151,29 +167,23 @@ pub fn tokens(options: Options) canvas.DesignTokens {
                     }),
                     .radius = 5,
                 },
-                // A menu row draws no focus ring: its wash IS the pointer's
-                // and the keyboard's only position marker. The quiet surface
-                // register pulls `surface_subtle` to within a couple of
-                // percent of the popover's own `surface`, so the framework
-                // fallback wash would land the highlighted row on the same
-                // color as the menu behind it. State the highlight from the
-                // live accent instead — the same language the selected
-                // ledger row speaks, one step louder because it is transient
-                // — and keep it stated for menu rows only so list rows keep
-                // their quiet hover.
+                // A menu row draws no focus ring, and the framework paints
+                // its label with `colors.text` in every state: this wash is
+                // both the only marker of where the pointer and the keyboard
+                // are and the only lever the app has over it. The framework
+                // fallback is `surface_subtle`, which this quiet register
+                // derives from the same background as `surface` — the fill
+                // the popover itself draws — leaving the highlighted row on
+                // the same color as the menu behind it. So the highlight is
+                // stated opaque against that surface, at the strength that
+                // clears WCAG 2.2 Focus Appearance (3:1 between the focused
+                // and unfocused row) while holding the label above the 4.5:1
+                // body-text floor the fixed ink caps it at. Menu rows only:
+                // the ledger's list rows keep their quiet accent tint.
                 .menu_item = .{
-                    .hover_background = withAlpha(colors.accent, switch (scheme) {
-                        .light => 0.16,
-                        .dark => 0.26,
-                    }),
-                    .active_background = withAlpha(colors.accent, switch (scheme) {
-                        .light => 0.16,
-                        .dark => 0.26,
-                    }),
-                    .pressed_background = withAlpha(colors.accent, switch (scheme) {
-                        .light => 0.24,
-                        .dark => 0.36,
-                    }),
+                    .hover_background = menu_highlight,
+                    .active_background = menu_highlight,
+                    .pressed_background = menu_press,
                     .radius = 5,
                 },
             },
@@ -355,15 +365,17 @@ test "the highlighted menu row never lands on the menu's own color" {
         try std.testing.expect(
             contrastRatio(highlight, surface) > contrastRatio(resolved.colors.surface_subtle, surface),
         );
-        // The house register's own hover wash separates by ~1.1:1 in light
-        // and ~1.2:1 in dark; hold at least that, in both schemes, for the
-        // one wash that has to carry keyboard position on its own.
-        try std.testing.expect(contrastRatio(highlight, surface) >= 1.2);
-        // Pressing deepens what focus already stated.
-        try std.testing.expect(contrastRatio(pressed, highlight) > 1.0);
-        // Menu ink is `colors.text` in every state, so the highlight has to
-        // keep the label comfortably readable.
-        try std.testing.expect(contrastRatio(resolved.colors.text, highlight) >= 7);
+        // WCAG 2.2 Focus Appearance: 3:1 between the same pixels focused and
+        // unfocused. A menu row has no ring to carry this instead.
+        try std.testing.expect(contrastRatio(highlight, surface) >= 3);
+        // Pressing carries the row further from the surface still.
+        try std.testing.expect(contrastRatio(pressed, surface) > contrastRatio(highlight, surface));
+        // Menu ink is `colors.text` in every state, so both washes have to
+        // keep the label above the body-text floor. AAA (7:1) is not
+        // reachable at the same time as the 3:1 focus bar with a fixed ink
+        // on this surface; AA is, in both schemes and both states.
+        try std.testing.expect(contrastRatio(resolved.colors.text, highlight) >= 4.5);
+        try std.testing.expect(contrastRatio(resolved.colors.text, pressed) >= 4.5);
         // Focus and hover paint the same row wash; keep them one value.
         try std.testing.expectEqualDeep(
             resolved.controls.menu_item.hover_background,
