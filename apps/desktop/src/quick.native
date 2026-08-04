@@ -5,8 +5,16 @@
   choose the work, set the block, start the timer.
   It shares the exact model, commands, and SQLite authority with the ledger.
 -->
+<!--
+  Native SDK 0.6.2 can report the 500 pt outer frame after re-showing this
+  standard-titlebar window, even though its declared content rect is 468 pt.
+  Keep the controller bound to the content rect so the fixed footer cannot be
+  pushed beneath the visible canvas when the global shortcut raises an
+  already-key Quick Focus window. The outer root still follows the host canvas;
+  sizing its child is what prevents the host's incorrect frame from winning.
+-->
 <stack role="group" label="Quick Focus">
-  <column background="background" grow="1" padding="12" gap="12" label="Quick Focus controller">
+  <column background="background" height="468" padding="12" gap="12" label="Quick Focus controller">
     <row padding="4" gap="12" cross="center">
       <column gap="2" grow="1">
         <text><span weight="bold">Quick Focus</span></text>
