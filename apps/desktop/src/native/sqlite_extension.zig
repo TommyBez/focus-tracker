@@ -25,7 +25,7 @@ pub const timer_complete_command = "focus.db.timer.complete";
 pub const timer_cancel_command = "focus.db.timer.cancel";
 
 const request_version: u32 = 1;
-const snapshot_version: u32 = 2;
+const snapshot_version: u32 = 3;
 const max_safe_integer: u64 = 9_007_199_254_740_991;
 const max_title_bytes: usize = 240;
 const max_tasks: u32 = 256;
@@ -435,17 +435,24 @@ pub const SqliteExtension = struct {
         const long_break_min = try reader.readU32();
         const daily_goal_min = try reader.readU32();
         const sound_enabled = try reader.readU8();
+        const quick_shortcut_enabled = try reader.readU8();
+        const quick_shortcut_modifiers = try reader.readU8();
+        const quick_shortcut_key = try reader.readU8();
         if (focus_min == 0 or focus_min > 180 or
             short_break_min == 0 or short_break_min > 60 or
             long_break_min == 0 or long_break_min > 120 or
             daily_goal_min == 0 or daily_goal_min > 1440 or
-            sound_enabled > 1)
+            sound_enabled > 1 or
+            quick_shortcut_enabled > 1 or
+            quick_shortcut_modifiers > 5 or
+            quick_shortcut_key > 5)
         {
             return error.InvalidSettings;
         }
         const statement = try self.prepare(
             \\UPDATE settings SET focus_min=?1,short_break_min=?2,long_break_min=?3,
-            \\daily_goal_min=?4,sound_enabled=?5 WHERE id=1;
+            \\daily_goal_min=?4,sound_enabled=?5,quick_shortcut_enabled=?6,
+            \\quick_shortcut_modifiers=?7,quick_shortcut_key=?8 WHERE id=1;
         );
         defer _ = c.sqlite3_finalize(statement);
         try self.bindU32(statement, 1, focus_min);
@@ -453,6 +460,9 @@ pub const SqliteExtension = struct {
         try self.bindU32(statement, 3, long_break_min);
         try self.bindU32(statement, 4, daily_goal_min);
         try self.bindU32(statement, 5, sound_enabled);
+        try self.bindU32(statement, 6, quick_shortcut_enabled);
+        try self.bindU32(statement, 7, quick_shortcut_modifiers);
+        try self.bindU32(statement, 8, quick_shortcut_key);
         try self.stepDone(statement);
     }
 
@@ -673,7 +683,7 @@ pub const SqliteExtension = struct {
         try writer.writeU64(try self.currentRevision());
 
         const settings = try self.prepare(
-            "SELECT focus_min,short_break_min,long_break_min,daily_goal_min,sound_enabled FROM settings WHERE id=1;",
+            "SELECT focus_min,short_break_min,long_break_min,daily_goal_min,sound_enabled,quick_shortcut_enabled,quick_shortcut_modifiers,quick_shortcut_key FROM settings WHERE id=1;",
         );
         defer _ = c.sqlite3_finalize(settings);
         if (c.sqlite3_step(settings) != c.SQLITE_ROW) return error.CorruptDatabase;
@@ -682,11 +692,17 @@ pub const SqliteExtension = struct {
         const long_break_min = try self.columnU32(settings, 2);
         const daily_goal_min = try self.columnU32(settings, 3);
         const sound_enabled = try self.columnU32(settings, 4);
+        const quick_shortcut_enabled = try self.columnU32(settings, 5);
+        const quick_shortcut_modifiers = try self.columnU32(settings, 6);
+        const quick_shortcut_key = try self.columnU32(settings, 7);
         if (focus_min == 0 or focus_min > 180 or
             short_break_min == 0 or short_break_min > 60 or
             long_break_min == 0 or long_break_min > 120 or
             daily_goal_min == 0 or daily_goal_min > 1440 or
-            sound_enabled > 1)
+            sound_enabled > 1 or
+            quick_shortcut_enabled > 1 or
+            quick_shortcut_modifiers > 5 or
+            quick_shortcut_key > 5)
         {
             return error.CorruptDatabase;
         }
@@ -695,6 +711,9 @@ pub const SqliteExtension = struct {
         try writer.writeU32(long_break_min);
         try writer.writeU32(daily_goal_min);
         try writer.writeU8(@intCast(sound_enabled));
+        try writer.writeU8(@intCast(quick_shortcut_enabled));
+        try writer.writeU8(@intCast(quick_shortcut_modifiers));
+        try writer.writeU8(@intCast(quick_shortcut_key));
 
         try writer.writeU64(try self.nextTaskId());
         const task_count = try self.scalarU32("SELECT COUNT(*) FROM tasks;");
@@ -845,8 +864,27 @@ pub const SqliteExtension = struct {
 
     fn migrate(self: *SqliteExtension) !void {
         const version = try self.scalarU32("PRAGMA user_version;");
-        if (version > 1) return error.UnsupportedSchema;
-        if (version == 1) return;
+        if (version > 2) return error.UnsupportedSchema;
+        if (version == 2) return;
+
+        // Never ALTER an untrusted database merely because it claims to be
+        // v1. Validate the complete legacy shape first, then add the shortcut
+        // columns atomically with defaults matching the historical Cmd+Shift+F.
+        if (version == 1) {
+            try self.validateSchema();
+            try self.exec("BEGIN IMMEDIATE;");
+            var migration_committed = false;
+            defer if (!migration_committed) self.rollback();
+            try self.exec(
+                \\ALTER TABLE settings ADD COLUMN quick_shortcut_enabled INTEGER NOT NULL DEFAULT 1 CHECK(quick_shortcut_enabled IN (0,1));
+                \\ALTER TABLE settings ADD COLUMN quick_shortcut_modifiers INTEGER NOT NULL DEFAULT 0 CHECK(quick_shortcut_modifiers BETWEEN 0 AND 5);
+                \\ALTER TABLE settings ADD COLUMN quick_shortcut_key INTEGER NOT NULL DEFAULT 0 CHECK(quick_shortcut_key BETWEEN 0 AND 5);
+                \\PRAGMA user_version=2;
+            );
+            try self.commit();
+            migration_committed = true;
+            return;
+        }
 
         try self.exec("BEGIN IMMEDIATE;");
         var committed = false;
@@ -858,7 +896,10 @@ pub const SqliteExtension = struct {
             \\  short_break_min INTEGER NOT NULL CHECK(short_break_min BETWEEN 1 AND 60),
             \\  long_break_min INTEGER NOT NULL CHECK(long_break_min BETWEEN 1 AND 120),
             \\  daily_goal_min INTEGER NOT NULL CHECK(daily_goal_min BETWEEN 1 AND 1440),
-            \\  sound_enabled INTEGER NOT NULL CHECK(sound_enabled IN (0,1))
+            \\  sound_enabled INTEGER NOT NULL CHECK(sound_enabled IN (0,1)),
+            \\  quick_shortcut_enabled INTEGER NOT NULL CHECK(quick_shortcut_enabled IN (0,1)),
+            \\  quick_shortcut_modifiers INTEGER NOT NULL CHECK(quick_shortcut_modifiers BETWEEN 0 AND 5),
+            \\  quick_shortcut_key INTEGER NOT NULL CHECK(quick_shortcut_key BETWEEN 0 AND 5)
             \\);
             \\CREATE TABLE app_meta(
             \\  id INTEGER PRIMARY KEY CHECK(id=1),
@@ -894,9 +935,9 @@ pub const SqliteExtension = struct {
             \\);
             \\CREATE UNIQUE INDEX one_live_focus_session ON focus_sessions(live_slot) WHERE live_slot=1;
             \\CREATE INDEX focus_sessions_history ON focus_sessions(state,ended_ms DESC,id DESC);
-            \\INSERT INTO settings VALUES(1,25,5,15,120,1);
+            \\INSERT INTO settings VALUES(1,25,5,15,120,1,1,0,0);
             \\INSERT INTO app_meta VALUES(1,0,1);
-            \\PRAGMA user_version=1;
+            \\PRAGMA user_version=2;
         );
         try self.commit();
         committed = true;
@@ -919,9 +960,10 @@ pub const SqliteExtension = struct {
 
     fn validateSchema(self: *SqliteExtension) !void {
         if (try self.scalarU32("PRAGMA foreign_keys;") != 1) return error.CorruptDatabase;
-        if (try self.scalarU32("PRAGMA user_version;") != 1) return error.UnsupportedSchema;
+        const schema_version = try self.scalarU32("PRAGMA user_version;");
+        if (schema_version != 1 and schema_version != 2) return error.UnsupportedSchema;
 
-        // V1 intentionally has no programmable schema objects. A trigger can
+        // Supported schemas intentionally have no programmable schema objects. A trigger can
         // make an otherwise valid mutation lie about what SQLite committed,
         // while a view broadens the executable schema surface. Internal
         // `sqlite_*` objects are owned by SQLite and are not user extensions.
@@ -929,7 +971,7 @@ pub const SqliteExtension = struct {
             "SELECT COUNT(*) FROM sqlite_schema WHERE type IN ('trigger','view') AND name NOT GLOB 'sqlite_*';",
         ) catch return error.CorruptDatabase) != 0) return error.CorruptDatabase;
 
-        // Version numbers are promises, not proof. Validate the v1 shape and
+        // Version numbers are promises, not proof. Validate the shared shape and
         // its critical constraints so an empty but hostile/partial database
         // cannot masquerade as a supported schema.
         const required_fragments = [_]struct {
@@ -966,9 +1008,24 @@ pub const SqliteExtension = struct {
                 required.compact_fragment,
             ) catch return error.CorruptDatabase)) return error.CorruptDatabase;
         }
+        if (schema_version == 2) {
+            const shortcut_fragments = [_][]const u8{
+                "quick_shortcut_enabledintegernotnull",
+                "quick_shortcut_modifiersintegernotnull",
+                "quick_shortcut_keyintegernotnull",
+                "check(quick_shortcut_enabledin(0,1))",
+                "check(quick_shortcut_modifiersbetween0and5)",
+                "check(quick_shortcut_keybetween0and5)",
+            };
+            for (shortcut_fragments) |fragment| {
+                if (!(self.schemaObjectContains("table", "settings", fragment) catch return error.CorruptDatabase)) {
+                    return error.CorruptDatabase;
+                }
+            }
+        }
 
         // Foreign-key SQL can appear inside a comment in `sqlite_schema`.
-        // Require SQLite's parsed FK metadata instead: v1 has exactly one FK,
+        // Require SQLite's parsed FK metadata instead: both schemas have exactly one FK,
         // `focus_sessions.task_id -> tasks.id`, with canonical actions.
         if (!(self.hasCanonicalFocusSessionForeignKey() catch return error.CorruptDatabase)) {
             return error.CorruptDatabase;
@@ -986,9 +1043,13 @@ pub const SqliteExtension = struct {
             "SELECT COUNT(*) FROM pragma_index_info('one_live_focus_session');",
         ) != 1) return error.CorruptDatabase;
 
+        const settings_invalid_query = if (schema_version == 2)
+            "SELECT COUNT(*) FROM settings WHERE id!=1 OR focus_min NOT BETWEEN 1 AND 180 OR short_break_min NOT BETWEEN 1 AND 60 OR long_break_min NOT BETWEEN 1 AND 120 OR daily_goal_min NOT BETWEEN 1 AND 1440 OR sound_enabled NOT IN (0,1) OR quick_shortcut_enabled IS NULL OR typeof(quick_shortcut_enabled)!='integer' OR quick_shortcut_enabled NOT IN (0,1) OR quick_shortcut_modifiers IS NULL OR typeof(quick_shortcut_modifiers)!='integer' OR quick_shortcut_modifiers NOT BETWEEN 0 AND 5 OR quick_shortcut_key IS NULL OR typeof(quick_shortcut_key)!='integer' OR quick_shortcut_key NOT BETWEEN 0 AND 5;"
+        else
+            "SELECT COUNT(*) FROM settings WHERE id!=1 OR focus_min NOT BETWEEN 1 AND 180 OR short_break_min NOT BETWEEN 1 AND 60 OR long_break_min NOT BETWEEN 1 AND 120 OR daily_goal_min NOT BETWEEN 1 AND 1440 OR sound_enabled NOT IN (0,1);";
         const invalid_counts = [_][]const u8{
             // Singleton records and bounded scalar domains.
-            "SELECT COUNT(*) FROM settings WHERE id!=1 OR focus_min NOT BETWEEN 1 AND 180 OR short_break_min NOT BETWEEN 1 AND 60 OR long_break_min NOT BETWEEN 1 AND 120 OR daily_goal_min NOT BETWEEN 1 AND 1440 OR sound_enabled NOT IN (0,1);",
+            settings_invalid_query,
             "SELECT CASE WHEN COUNT(*)=1 THEN 0 ELSE 1 END FROM settings;",
             "SELECT COUNT(*) FROM app_meta WHERE id!=1 OR revision<0 OR revision>9007199254740991 OR next_task_id<=0 OR next_task_id>9007199254740991;",
             "SELECT CASE WHEN COUNT(*)=1 THEN 0 ELSE 1 END FROM app_meta;",
@@ -1463,7 +1524,7 @@ fn probeSnapshot(bytes: []const u8) !SnapshotProbe {
     try reader.expectMagic("FCS2");
     if (try reader.readU32() != snapshot_version) return error.UnsupportedVersion;
     const revision = try reader.readU64();
-    _ = try reader.take(4 * 4 + 1);
+    _ = try reader.take(4 * 4 + 4);
     const next_task_id = try reader.readU64();
     const task_count = try reader.readU32();
     var task_index: u32 = 0;
@@ -1508,7 +1569,7 @@ fn probeSnapshotTask(bytes: []const u8, expected_id: u64) !SnapshotTaskProbe {
     try reader.expectMagic("FCS2");
     if (try reader.readU32() != snapshot_version) return error.UnsupportedVersion;
     _ = try reader.readU64();
-    _ = try reader.take(4 * 4 + 1);
+    _ = try reader.take(4 * 4 + 4);
     _ = try reader.readU64();
     const task_count = try reader.readU32();
     var task_index: u32 = 0;
@@ -1538,7 +1599,7 @@ fn probeSnapshotRecent(bytes: []const u8) !SnapshotRecentProbe {
     try reader.expectMagic("FCS2");
     if (try reader.readU32() != snapshot_version) return error.UnsupportedVersion;
     _ = try reader.readU64();
-    _ = try reader.take(4 * 4 + 1);
+    _ = try reader.take(4 * 4 + 4);
     _ = try reader.readU64();
     const task_count = try reader.readU32();
     var task_index: u32 = 0;
@@ -2285,7 +2346,7 @@ test "create and rename classify complete titles at the 240-byte boundary" {
     ));
 }
 
-test "existing v1 schema fails closed when the required live-session index is missing" {
+test "existing schema fails closed when the required live-session index is missing" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
@@ -2302,7 +2363,7 @@ test "existing v1 schema fails closed when the required live-session index is mi
     try std.testing.expect(extension.db == null);
 }
 
-test "v1 schema rejects user-defined triggers and views" {
+test "schema rejects user-defined triggers and views" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
@@ -2311,7 +2372,7 @@ test "v1 schema rejects user-defined triggers and views" {
     defer extension.deinit();
     try extension.startModule(.{ .platform_name = "macos" });
 
-    // The canonical v1 schema has neither kind of programmable object.
+    // The canonical schema has neither kind of programmable object.
     try extension.validateSchema();
     try extension.exec(
         \\CREATE TRIGGER hostile_task_insert AFTER INSERT ON tasks
@@ -2327,7 +2388,7 @@ test "v1 schema rejects user-defined triggers and views" {
     try std.testing.expectError(error.CorruptDatabase, extension.validateSchema());
 }
 
-test "v1 schema requires parsed focus-session foreign-key metadata" {
+test "schema requires parsed focus-session foreign-key metadata" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
@@ -2336,7 +2397,7 @@ test "v1 schema requires parsed focus-session foreign-key metadata" {
     defer extension.deinit();
     try extension.startModule(.{ .platform_name = "macos" });
 
-    // Canonical v1 exposes exactly the expected parsed relation.
+    // The canonical schema exposes exactly the expected parsed relation.
     try std.testing.expect(try extension.hasCanonicalFocusSessionForeignKey());
     try extension.validateSchema();
 
@@ -2376,7 +2437,7 @@ test "v1 schema requires parsed focus-session foreign-key metadata" {
     try std.testing.expectError(error.CorruptDatabase, extension.validateSchema());
 }
 
-test "future schema versions are never opened as v1" {
+test "v2 schema rejects nullable shortcut columns and null values" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
@@ -2384,7 +2445,116 @@ test "future schema versions are never opened as v1" {
     var extension = try SqliteExtension.init(std.testing.allocator, std.testing.io, data_dir);
     defer extension.deinit();
     try extension.startModule(.{ .platform_name = "macos" });
-    try extension.exec("PRAGMA user_version=2;");
+
+    try extension.exec(
+        \\ALTER TABLE settings RENAME TO settings_canonical;
+        \\CREATE TABLE settings(
+        \\  id INTEGER PRIMARY KEY CHECK(id=1),
+        \\  focus_min INTEGER NOT NULL CHECK(focus_min BETWEEN 1 AND 180),
+        \\  short_break_min INTEGER NOT NULL CHECK(short_break_min BETWEEN 1 AND 60),
+        \\  long_break_min INTEGER NOT NULL CHECK(long_break_min BETWEEN 1 AND 120),
+        \\  daily_goal_min INTEGER NOT NULL CHECK(daily_goal_min BETWEEN 1 AND 1440),
+        \\  sound_enabled INTEGER NOT NULL CHECK(sound_enabled IN (0,1)),
+        \\  quick_shortcut_enabled INTEGER CHECK(quick_shortcut_enabled IN (0,1)),
+        \\  quick_shortcut_modifiers INTEGER CHECK(quick_shortcut_modifiers BETWEEN 0 AND 5),
+        \\  quick_shortcut_key INTEGER CHECK(quick_shortcut_key BETWEEN 0 AND 5)
+        \\);
+        \\INSERT INTO settings VALUES(1,25,5,15,120,1,NULL,NULL,NULL);
+        \\DROP TABLE settings_canonical;
+    );
+    try std.testing.expectError(error.CorruptDatabase, extension.validateSchema());
+}
+
+test "v1 settings migrate to v2 with the historical global shortcut defaults" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
+    const data_dir = try testDataDir(&tmp, &path_buffer);
+    var extension = try SqliteExtension.init(std.testing.allocator, std.testing.io, data_dir);
+    defer extension.deinit();
+    try extension.startModule(.{ .platform_name = "macos" });
+
+    // Rebuild only the settings table in the exact legacy shape. The rest of
+    // the database keeps exercising the real schema validator and reopen path.
+    try extension.exec(
+        \\UPDATE settings SET focus_min=50,short_break_min=10,long_break_min=30,daily_goal_min=180,sound_enabled=0 WHERE id=1;
+        \\CREATE TABLE settings_v1(
+        \\  id INTEGER PRIMARY KEY CHECK(id=1),
+        \\  focus_min INTEGER NOT NULL CHECK(focus_min BETWEEN 1 AND 180),
+        \\  short_break_min INTEGER NOT NULL CHECK(short_break_min BETWEEN 1 AND 60),
+        \\  long_break_min INTEGER NOT NULL CHECK(long_break_min BETWEEN 1 AND 120),
+        \\  daily_goal_min INTEGER NOT NULL CHECK(daily_goal_min BETWEEN 1 AND 1440),
+        \\  sound_enabled INTEGER NOT NULL CHECK(sound_enabled IN (0,1))
+        \\);
+        \\INSERT INTO settings_v1 SELECT id,focus_min,short_break_min,long_break_min,daily_goal_min,sound_enabled FROM settings;
+        \\DROP TABLE settings;
+        \\ALTER TABLE settings_v1 RENAME TO settings;
+        \\PRAGMA user_version=1;
+    );
+    try extension.stopModule(.{ .platform_name = "macos" });
+    try extension.startModule(.{ .platform_name = "macos" });
+
+    try std.testing.expectEqual(@as(u32, 2), try extension.scalarU32("PRAGMA user_version;"));
+    try std.testing.expectEqual(@as(u64, 50), try extension.scalarU64("SELECT focus_min FROM settings WHERE id=1;"));
+    try std.testing.expectEqual(@as(u64, 0), try extension.scalarU64("SELECT sound_enabled FROM settings WHERE id=1;"));
+    try std.testing.expectEqual(@as(u64, 1), try extension.scalarU64("SELECT quick_shortcut_enabled FROM settings WHERE id=1;"));
+    try std.testing.expectEqual(@as(u64, 0), try extension.scalarU64("SELECT quick_shortcut_modifiers FROM settings WHERE id=1;"));
+    try std.testing.expectEqual(@as(u64, 0), try extension.scalarU64("SELECT quick_shortcut_key FROM settings WHERE id=1;"));
+}
+
+test "global shortcut settings persist and invalid wires roll back" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
+    const data_dir = try testDataDir(&tmp, &path_buffer);
+    var extension = try SqliteExtension.init(std.testing.allocator, std.testing.io, data_dir);
+    defer extension.deinit();
+    try extension.startModule(.{ .platform_name = "macos" });
+
+    var request = Writer.init(std.testing.allocator);
+    defer request.deinit();
+    try appendMutationHeader(&request, 0, 1_000);
+    try request.writeU32(25);
+    try request.writeU32(5);
+    try request.writeU32(15);
+    try request.writeU32(120);
+    try request.writeU8(1);
+    try request.writeU8(1);
+    try request.writeU8(5);
+    try request.writeU8(5);
+    extension.freeResponse(try extension.handleRequest(settings_set_command, request.list.items));
+    try std.testing.expectEqual(@as(u64, 1), try extension.currentRevision());
+
+    try extension.stopModule(.{ .platform_name = "macos" });
+    try extension.startModule(.{ .platform_name = "macos" });
+    try std.testing.expectEqual(@as(u64, 1), try extension.scalarU64("SELECT quick_shortcut_enabled FROM settings WHERE id=1;"));
+    try std.testing.expectEqual(@as(u64, 5), try extension.scalarU64("SELECT quick_shortcut_modifiers FROM settings WHERE id=1;"));
+    try std.testing.expectEqual(@as(u64, 5), try extension.scalarU64("SELECT quick_shortcut_key FROM settings WHERE id=1;"));
+
+    request.list.clearRetainingCapacity();
+    try appendMutationHeader(&request, 1, 2_000);
+    try request.writeU32(25);
+    try request.writeU32(5);
+    try request.writeU32(15);
+    try request.writeU32(120);
+    try request.writeU8(1);
+    try request.writeU8(1);
+    try request.writeU8(6); // outside the persisted modifier enum
+    try request.writeU8(0);
+    try expectRequestError(&extension, error.InvalidSettings, settings_set_command, request.list.items);
+    try std.testing.expectEqual(@as(u64, 1), try extension.currentRevision());
+    try std.testing.expectEqual(@as(u64, 5), try extension.scalarU64("SELECT quick_shortcut_modifiers FROM settings WHERE id=1;"));
+}
+
+test "future schema versions are never opened as current" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
+    const data_dir = try testDataDir(&tmp, &path_buffer);
+    var extension = try SqliteExtension.init(std.testing.allocator, std.testing.io, data_dir);
+    defer extension.deinit();
+    try extension.startModule(.{ .platform_name = "macos" });
+    try extension.exec("PRAGMA user_version=3;");
     try extension.stopModule(.{ .platform_name = "macos" });
     try std.testing.expectError(
         error.UnsupportedSchema,
